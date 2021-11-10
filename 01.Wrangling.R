@@ -192,6 +192,7 @@ dat.breed <- dat.traj %>%
   mutate(Season="Breed",
          Winter=0)  %>% 
   dplyr::filter((useclust==1 & Type != "Band") | BandUse==1) %>% 
+  dplyr::filter(!(PinpointID==443 & Lat < 46)) %>% 
   dplyr::select(PinpointID, Population, Mass, Wing, Sex, Type, DateTime, Date, doy, Time, sun, Year, Lat, Long, BandDist, WintDist, GCD, Season, Winter, dist, R2n, abs.angle, rel.angle, cluster, count)
 
 #Visualize
