@@ -80,11 +80,29 @@ table(dat.area$PinpointID)
 write.csv(dat.area, "KDEArea.csv", row.names = FALSE)
 
 #8. Effects on home range size----
-dat.area <- read.csv("KDEArea.csv")
+dat.area <- read.csv("KDEArea.csv") %>% 
+  left_join(dat.hab %>% 
+              dplyr::filter(Season %in% c("Breed", "Winter")) %>% 
+              group_by(PinpointID, Winter) %>% 
+              summarize(Lat=mean(Lat),
+                        Long=mean(Long)) %>% 
+              ungroup())
 
 ggplot(dat.area) +
   geom_point(aes(x=count, y=HRarea, colour=factor(Sex))) +
   facet_wrap(~Season, scales="free") #Seems like maybe a relationship for breeding but not for winter
+
+ggplot(dat.area %>% dplyr::filter(Wing > 0)) +
+  geom_point(aes(x=Wing, y=HRarea, colour=factor(Sex))) +
+  facet_wrap(~Season, scales="free")
+
+ggplot(dat.area %>% dplyr::filter(Wing > 0)) +
+  geom_point(aes(x=Lat, y=HRarea, colour=factor(Sex))) +
+  facet_wrap(~Season, scales="free")
+
+ggplot(dat.area %>% dplyr::filter(Wing > 0)) +
+  geom_point(aes(x=Long, y=HRarea, colour=factor(Sex))) +
+  facet_wrap(~Season, scales="free")
 
 dat.area.breed <- dat.area %>% 
   dplyr::filter(Season=="Breed") %>% 
