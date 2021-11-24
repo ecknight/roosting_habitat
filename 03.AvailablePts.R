@@ -11,10 +11,12 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
   mutate(ID = paste0(PinpointID,"-", row)) %>% 
   arrange(ID)
 
-IDs <- data.frame(ID = rep(dat.hab$ID, 20)) %>% 
+#3. Point level: Random points within 200 m----
+n.pt <- 100
+
+IDs <- data.frame(ID = rep(dat.hab$ID, n.pt)) %>% 
   arrange(ID)
 
-#3. Point level: Random points within 200 m----
 buff.pt <- dat.hab %>% 
   st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
   st_transform(crs=3857) %>% 
@@ -22,7 +24,7 @@ buff.pt <- dat.hab %>%
   arrange(PinpointID, Season)
 
 set.seed(1234)
-pts.pt <- st_sample(buff.pt, size=rep(100, nrow(buff.pt))) %>% 
+pts.pt <- st_sample(buff.pt, size=rep(n.pt, nrow(buff.pt))) %>% 
   st_coordinates() %>% 
   data.frame() %>% 
   cbind(IDs) %>% 
@@ -52,6 +54,11 @@ plot(dat.pt.sf)
 write_sf(dat.pt.sf, "Shapefiles/CONIMCP_CleanDataAll_Habitat_Roosting_200m.shp", append=FALSE)
 
 #4. Home range level: Random points within 5 km----
+n.hr <- 20
+
+IDs <- data.frame(ID = rep(dat.hab$ID, n.hr)) %>% 
+  arrange(ID)
+
 buff.pt <- dat.hab %>% 
   st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
   st_transform(crs=3857) %>% 
@@ -59,7 +66,7 @@ buff.pt <- dat.hab %>%
   arrange(PinpointID, Season)
 
 set.seed(1234)
-pts.pt <- st_sample(buff.pt, size=rep(20, nrow(buff.pt))) %>% 
+pts.pt <- st_sample(buff.pt, size=rep(n.hr, nrow(buff.pt))) %>% 
   st_coordinates() %>% 
   data.frame() %>% 
   cbind(IDs) %>% 
@@ -89,6 +96,11 @@ plot(dat.pt.sf)
 write_sf(dat.pt.sf, "Shapefiles/CONIMCP_CleanDataAll_Habitat_Roosting_5km.shp", append=FALSE)
 
 #5. Landscape level: Random points within 100 km----
+n.land <- 20
+
+IDs <- data.frame(ID = rep(dat.hab$ID, n.land)) %>% 
+  arrange(ID)
+
 buff.pt <- dat.hab %>% 
   st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
   st_transform(crs=3857) %>% 
@@ -96,7 +108,7 @@ buff.pt <- dat.hab %>%
   arrange(PinpointID, Season)
 
 set.seed(1234)
-pts.pt <- st_sample(buff.pt, size=rep(100, nrow(buff.pt))) %>% 
+pts.pt <- st_sample(buff.pt, size=rep(n.land, nrow(buff.pt))) %>% 
   st_coordinates() %>% 
   data.frame() %>% 
   cbind(IDs) %>% 
@@ -123,8 +135,4 @@ dat.pt.sf <- dat.pt %>%
 
 #plot(dat.pt.sf)
 
-dat.pt.sf.1 <- dat.pt.sf[1:50000,]
-dat.pt.sf.2 <- dat.pt.sf[1:50000,]
-dat.pt.sf.3 <- dat.pt.sf[1:50000,]
-
-write_sf(dat.pt.sf.1, "Shapefiles/CONIMCP_CleanDataAll_Habitat_Roosting_100km_1.shp", append=FALSE)
+write_sf(dat.pt.sf, "Shapefiles/CONIMCP_CleanDataAll_Habitat_Roosting_100km.shp", append=FALSE)
