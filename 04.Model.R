@@ -50,59 +50,15 @@ pt.0 <- pt %>%
 
 pt.20 <- rbind(pt.1, pt.0) 
 
-#Number of sets per individual
-pt.20.n <- pt.20 %>% 
-  dplyr::filter(Season!="WinterMig") %>% 
-  dplyr::select(Season, pinpointID, ID) %>% 
-  unique() %>% 
-  group_by(Season, pinpointID) %>% 
-  summarize(n=n()) %>% 
-  ungroup()
-
-ggplot(pt.20.n) +
-  geom_histogram(aes(x=n)) +
-  facet_wrap(~Season)
-
-set.n <- data.frame()
-for(i in 1:max(pt.20.n$n)){
-  n.i <- pt.20.n %>% 
-    dplyr::filter(n >= i) %>% 
-    group_by(Season) %>% 
-    summarize(birds = n(),
-              points = birds*i) %>% 
-    ungroup() %>% 
-    mutate(set = i)
-  set.n <- rbind(set.n, n.i)
-}
-
-ggplot(set.n)  +
-  geom_point(aes(x=birds, y=points, colour=set)) +
-  facet_wrap(~Season) +
-  scale_colour_viridis_c()
-
-set.n.max <- set.n %>% 
-  group_by(Season) %>% 
-  mutate(max = max(points)) %>% 
-  ungroup() %>% 
-  dplyr::filter(max==points)
-set.n.max
-
-#Split into seasons, add BirdID field, and standardize # of sets per birds
-pt.20.n.breed <- pt.20.n %>% 
-  dplyr::filter(Season=="Breed",
-                n >= 9) %>% 
-  arrange(pinpointID) %>% 
-  mutate(BirdID = row_number()) %>% 
-  dplyr::select(Season, pinpointID, BirdID) %>% 
-  inner_join(pt.20) %>% 
-  dplyr::select(Season, pinpointID, BirdID, ID) %>% 
-  unique() %>% 
-  group_by(Season, pinpointID, BirdID) %>% 
-  sample_n(9) %>% 
-  ungroup()
-
+#Split into seasons, add BirdID field
 pt.20.breed <- pt.20 %>% 
-  inner_join(pt.20.n.breed)
+  dplyr::filter(Season=="Breed") %>% 
+  dplyr::select(pinpointID) %>% 
+  unique() %>% 
+  mutate(BirdID = row_number()) %>% 
+  right_join(pt.20 %>% 
+                dplyr::filter(Season=="Breed")) %>% 
+  arrange(BirdID, ID, used)
 
 pt.20.winter <- pt.20 %>% 
   dplyr::filter(Season=="Winter")
@@ -128,32 +84,28 @@ ggplot(pt) +
   facet_wrap(~Season)
 
 #3. Model - Rchoice----
-mod.pt.1 <- Rchoice(used ~ class,
-                    data = pt.20.breed,
+pt.20.breed.rchoice <- pt.20.breed %>% 
+  dplyr::select(used, class, BirdID)
+
+mod.pt.class <- Rchoice(used ~ class + BirdID,
+                    ranp = c(BirdID = "u"),
+                    data = pt.20.breed.rchoice,
                     family = binomial('logit'),
- #                   ranp = c(constant = "n", pinpointID = "u"),
- #                   ranp = c(constant = "n"),
                     R = 10,
-                    panel = TRUE,
-                    index = "pinpointID",
                     print.init = TRUE)
-summary(mod.pt.1)
+summary(mod.pt.class)
 
+mod.pt.null <- Rchoice(used ~ 1 + BirdID,
+                    ranp = c(BirdID = "u"),
+                    data = pt.20.breed.rchoice,
+                    family = binomial('logit'),
+                    R = 10,
+                    print.init = TRUE)
 
-#Working example
-library(pglm)
-data("UnionWage", package = "pglm")
-UnionWage$lwage <- log(UnionWage$wage)
-UnionWage$union <- ifelse(UnionWage$union=="yes", 1, 0)
+AIC(mod.pt.class)
+AIC(mod.pt.null)
 
-union.ran <- Rchoice(union ~ exper + rural + wage,
-                     data = UnionWage[1:2000, ],
-                     family = binomial('probit'),
-                     ranp = c(constant = "n", wage = "t"),
-                     R = 10,
-                     panel = TRUE,
-                     index = "id",
-                     print.init = TRUE)
+#This can't be correct, there's no way to indicate choice sets
 
 #4. Model - JAGS----
 
@@ -166,16 +118,19 @@ library(jagsUI)
 nsets <- length(unique(pt.20.breed$ID))
   
 #a vector identifying how many alternatives (including the chosen one) are available for each choice set.
-nchoices <- 21
+nchoices <- rep(21, nsets)
   
 #a sets-by-alternatives matrix of 0 (available) and 1(used) values.  So if there are 100 choice sets, each with 20 possible choices, this is a 100-by-20 matrix
-y <- matrix(pt.20.breed$used, nrow=nsets, ncol=nchoices)
+y <- matrix(pt.20.breed$used, nrow=nsets, ncol=nchoices, byrow=TRUE)
   
 #a vector that is the same length as the number of choice sets, specifying a numeric bird id.  The smallest number in this vector must be 1, and the largest must be equivalent to the number of unique birds.  
-bird <- unique(pt.20.breed$BirdID)
+pt.20.breed.bird <- pt.20.breed %>% 
+  dplyr::select(BirdID, ID) %>% 
+  unique()
+bird <- pt.20.breed.bird$BirdID
   
 #a matrix with the same dimensions as y that specifies the first explanatory variable for each set-by-choice combination
-X1 <- matrix(pt.20.breed$mean, nrow=nsets, ncol=nchoices)
+X1 <- matrix(pt.20.breed$mean, nrow=nsets, ncol=nchoices, byrow=TRUE)
 
 #max value in the bird vector above (i.e., an integer representing how many unique birds there are)
 nbirds <- max(bird)
