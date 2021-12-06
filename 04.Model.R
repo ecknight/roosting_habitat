@@ -1,7 +1,12 @@
 library(tidyverse)
 library(Rchoice)
+library(jagsUI)
 
-#1. Wrangle----
+#TO DO: FIGURE OUT FOR CATEGORICAL VAR####
+#TO DO: LOOP THROUGH 4 SEASONS####
+
+#PART A: WRANGLING####
+
 dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
   dplyr::filter(Type != "Band") %>% 
   group_by(PinpointID) %>% 
@@ -11,8 +16,8 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
   arrange(ID) %>% 
   dplyr::select(ID, Year, Season, Winter)
 
-#Point level data
-pt <- read.csv("Data/Worldcover_point.csv") %>% 
+#1. Wrangle point level----
+pt <- read.csv("Data/Worldcover_point.csv")
   dplyr::select(-.geo) %>% 
   dplyr::filter(!is.na(mean)) %>% 
   mutate(class = case_when(mean==10 ~ "tree",
@@ -69,48 +74,41 @@ pt.20.fall <- pt.20 %>%
 pt.20.spring <- pt.20 %>% 
   dplyr::filter(Season=="SpringMig")
 
-
-#Home range level data
+#2. Wrangle home range level data----
 hr <- read.csv("Data/Copernicus_hr.csv") %>% 
-  dplyr::select(-.geo)
+  dplyr::select(-.geo, -ID, -system.index) %>% 
+  dplyr::filter(!is.na(bare.coverfraction)) %>% 
+  mutate(used = ifelse(Type=="Used", 1, 0)) %>% 
+  left_join(dat.hab) %>% 
+  separate(ID, into=c("pinpointID", "n"), remove=FALSE) %>% 
+  mutate(pinpointID = as.numeric(pinpointID),
+         n = as.numeric(n))
+
+hr.breed <- hr %>% 
+  dplyr::filter(Season=="Breed") %>% 
+  dplyr::select(pinpointID) %>% 
+  unique() %>% 
+  mutate(BirdID = row_number()) %>% 
+  right_join(pt.20 %>% 
+               dplyr::filter(Season=="Breed")) %>% 
+  arrange(BirdID, ID, used)
 
 #Landscape level data
 land <- read.csv("Data/Copernicus_land.csv") %>% 
   dplyr::select(-.geo)
 
-#2. Visualize----
+
+#PART B: MODELLING####
+
+#4. Model point level----
+
+#Visualize
 ggplot(pt) +
   geom_jitter(aes(x=class, y=used, colour=class)) +
   facet_wrap(~Season)
 
-#3. Model - Rchoice----
-pt.20.breed.rchoice <- pt.20.breed %>% 
-  dplyr::select(used, class, BirdID)
-
-mod.pt.class <- Rchoice(used ~ class + BirdID,
-                    ranp = c(BirdID = "u"),
-                    data = pt.20.breed.rchoice,
-                    family = binomial('logit'),
-                    R = 10,
-                    print.init = TRUE)
-summary(mod.pt.class)
-
-mod.pt.null <- Rchoice(used ~ 1 + BirdID,
-                    ranp = c(BirdID = "u"),
-                    data = pt.20.breed.rchoice,
-                    family = binomial('logit'),
-                    R = 10,
-                    print.init = TRUE)
-
-AIC(mod.pt.class)
-AIC(mod.pt.null)
-
-#This can't be correct, there's no way to indicate choice sets
-
-#4. Model - JAGS----
-
 #Load package
-library(jagsUI)
+
 
 #Variables for model
 
@@ -189,6 +187,86 @@ nc=3; ni=200000; nb=100000; nt=50; na=1000
 outM = jags(win.data, inits, params, "Mixed model.txt", n.chains=nc, n.thin=nt, n.iter=ni, n.burnin=nb, parallel=T)
 
 
+#5. Model - Home range level----
+
+#Load package
+library(jagsUI)
+
+#Variables for model
+
+#number of choice sets
+nsets <- length(unique(pt.20.breed$ID))
+
+#a vector identifying how many alternatives (including the chosen one) are available for each choice set.
+nchoices <- rep(21, nsets)
+
+#a sets-by-alternatives matrix of 0 (available) and 1(used) values.  So if there are 100 choice sets, each with 20 possible choices, this is a 100-by-20 matrix
+y <- matrix(pt.20.breed$used, nrow=nsets, ncol=nchoices, byrow=TRUE)
+
+#a vector that is the same length as the number of choice sets, specifying a numeric bird id.  The smallest number in this vector must be 1, and the largest must be equivalent to the number of unique birds.  
+pt.20.breed.bird <- pt.20.breed %>% 
+  dplyr::select(BirdID, ID) %>% 
+  unique()
+bird <- pt.20.breed.bird$BirdID
+
+#a matrix with the same dimensions as y that specifies the first explanatory variable for each set-by-choice combination
+X1 <- matrix(pt.20.breed$mean, nrow=nsets, ncol=nchoices, byrow=TRUE)
+
+#max value in the bird vector above (i.e., an integer representing how many unique birds there are)
+nbirds <- max(bird)
+
+#Model specification for mixed effects conditional logistic model
+
+sink("Mixed model.txt")
+cat("model{    
+#Priors
+mu.beta1 ~ dnorm(0, 0.01)
+tau.beta1 ~ dgamma(0.1, 0.1)
+sigma.beta1 <- 1/sqrt(tau.beta1)
+
+for(b in 1:nbirds){    
+beta1[b] ~ dnorm(mu.beta1, tau.beta1)    
+}    
+
+#Likelihood   
+    for(i in 1:nsets){    
+    y[i,1:nchoices[i]] ~ dmulti(p[i,1:nchoices[i]],1)    
+    ysim[i,1:nchoices[i]] ~ dmulti(p[i,1:nchoices[i]],1)    
+    
+    for(j in 1:nchoices[i]){    
+    log(phi[i,j]) <- beta1[bird[i]]*X1[i,j]    
+    p[i,j] <- phi[i,j]/(sum(phi[i,1:nchoices[i]]))    
+    
+    D1[i,j] <- pow(y[i,j] - p[i,j], 2)    
+    D1sim[i,j] <- pow(ysim[i,j] - p[i,j], 2)    
+    }    
+    
+    D2[i] <- sum(D1[i,1:nchoices[i]])    
+    D2sim[i] <- sum(D1sim[i,1:nchoices[i]])
+    }    
+    
+    fit.data <- sum(D2[1:nsets])    
+    fit.sim <- sum(D2sim[1:nsets])    
+    bpv <- fit.data - fit.sim    
+    }",fill = TRUE)
+
+sink()
+
+#Specify data for JAGS
+win.data = list(y=y, nsets=nsets,  nchoices=nchoices, bird=bird, X1=X1, nbirds=nbirds)
+
+#Specify initial values
+inits = function()list(mu.beta1=rnorm(1), tau.beta1=runif(1))
+
+#Specify parameters to track
+params = c("mu.beta1", "sigma.beta1", "beta1",        
+           "p", "fit.data", "fit.sim", "bpv")
+
+#Number of chains, iterations, burnin, and thinning 
+nc=3; ni=200000; nb=100000; nt=50; na=1000 
+
+#Run the model in JAGS
+outM = jags(win.data, inits, params, "Mixed model.txt", n.chains=nc, n.thin=nt, n.iter=ni, n.burnin=nb, parallel=T)
 
 
 
