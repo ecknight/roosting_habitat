@@ -8,14 +8,14 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
   group_by(PinpointID) %>% 
   mutate(row=row_number()) %>% 
   ungroup() %>% 
-  mutate(ID = paste0(PinpointID,"-", row)) %>% 
-  arrange(ID)
+  mutate(ptID = paste0(PinpointID,"-", row)) %>% 
+  arrange(ptID)
 
 #3. Point level: Random points within 200 m----
-n.pt <- 100
+n.pt <- 20
 
-IDs <- data.frame(ID = rep(dat.hab$ID, n.pt)) %>% 
-  arrange(ID)
+IDs <- data.frame(ptID = rep(dat.hab$ptID, n.pt)) %>% 
+  arrange(ptID)
 
 buff.pt <- dat.hab %>% 
   st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
@@ -39,10 +39,10 @@ dat.pt <- dat.hab %>%
   cbind(dat.hab) %>% 
   mutate(Type="Used",
          Radius="200m") %>% 
-  dplyr::select(X, Y, ID, DateTime, Type, Radius) %>% 
+  dplyr::select(ptID, X, Y, DateTime, Type, Radius) %>% 
   rbind(pts.pt)
   
-write.csv(dat.pt, "Data/CONIMCP_CleanDataAll_Habitat_Roosting_200m.csv")
+write.csv(dat.pt, "Data/CONIMCP_CleanDataAll_Habitat_Roosting_200m.csv", row.names = FALSE)
 
 dat.pt.sf <- dat.pt %>% 
   st_as_sf(coords=c("X", "Y"), crs=3857) %>% 
@@ -56,8 +56,8 @@ write_sf(dat.pt.sf, "Shapefiles/CONIMCP_CleanDataAll_Habitat_Roosting_200m.shp",
 #4. Home range level: Random points within 5 km----
 n.hr <- 20
 
-IDs <- data.frame(ID = rep(dat.hab$ID, n.hr)) %>% 
-  arrange(ID)
+IDs <- data.frame(ptID = rep(dat.hab$ptID, n.hr)) %>% 
+  arrange(ptID)
 
 buff.pt <- dat.hab %>% 
   st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
@@ -81,10 +81,10 @@ dat.pt <- dat.hab %>%
   cbind(dat.hab) %>% 
   mutate(Type="Used",
          Radius="5km") %>% 
-  dplyr::select(X, Y, ID, DateTime, Type, Radius) %>% 
+  dplyr::select(ptID, X, Y, DateTime, Type, Radius) %>% 
   rbind(pts.pt)
 
-write.csv(dat.pt, "Data/CONIMCP_CleanDataAll_Habitat_Roosting_5km.csv")
+write.csv(dat.pt, "Data/CONIMCP_CleanDataAll_Habitat_Roosting_5km.csv", row.names=FALSE)
 
 dat.pt.sf <- dat.pt %>% 
   st_as_sf(coords=c("X", "Y"), crs=3857) %>% 
@@ -98,8 +98,8 @@ write_sf(dat.pt.sf, "Shapefiles/CONIMCP_CleanDataAll_Habitat_Roosting_5km.shp", 
 #5. Landscape level: Random points within 100 km----
 n.land <- 20
 
-IDs <- data.frame(ID = rep(dat.hab$ID, n.land)) %>% 
-  arrange(ID)
+IDs <- data.frame(ptID = rep(dat.hab$ptID, n.land)) %>% 
+  arrange(ptID)
 
 buff.pt <- dat.hab %>% 
   st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
@@ -123,10 +123,10 @@ dat.pt <- dat.hab %>%
   cbind(dat.hab) %>% 
   mutate(Type="Used",
          Radius="100km") %>% 
-  dplyr::select(X, Y, ID, DateTime, Type, Radius) %>% 
+  dplyr::select(ptID, X, Y, DateTime, Type, Radius) %>% 
   rbind(pts.pt)
 
-write.csv(dat.pt, "Data/CONIMCP_CleanDataAll_Habitat_Roosting_100km.csv")
+write.csv(dat.pt, "Data/CONIMCP_CleanDataAll_Habitat_Roosting_100km.csv", row.names=FALSE)
 
 dat.pt.sf <- dat.pt %>% 
   st_as_sf(coords=c("X", "Y"), crs=3857) %>% 
