@@ -1,5 +1,6 @@
 library(tidyverse)
 library(jagsUI)
+library(coda)
 library(corrplot)
 library(usdm)
 
@@ -39,7 +40,6 @@ pt <- pt.raw %>%
   rename_with(~gsub(pattern=".coverfraction", replacement="", .x)) %>% 
   mutate(water = water.permanent + water.seasonal) %>% 
   dplyr::filter(Season!="WinterMig")
-
 
 #Split into seasons, add BirdID field
 pt.breed <- pt %>% 
@@ -251,40 +251,40 @@ land.spring <- land %>%
 
 #PART B: MODELLING####
 
-#4. Model HR level----
+#4. Model pt level----
 #4a. Visualize----
-ggplot(hr) +
+ggplot(pt) +
   geom_hex(aes(x=tree, y=used)) +
   geom_smooth(aes(x=tree, y=used)) +
   facet_wrap(~Season)
 
-ggplot(hr) +
-  geom_hex(aes(x=shrub, y=used)) +
-  geom_smooth(aes(x=shrub, y=used)) +
+ggplot(pt) +
+  geom_hex(aes(x=sptub, y=used)) +
+  geom_smooth(aes(x=sptub, y=used)) +
   facet_wrap(~Season)
 
-ggplot(hr) +
+ggplot(pt) +
   geom_hex(aes(x=grass, y=used)) +
   geom_smooth(aes(x=grass, y=used)) +
   facet_wrap(~Season)
 
-ggplot(hr) +
+ggplot(pt) +
   geom_hex(aes(x=bare, y=used)) +
   geom_smooth(aes(x=bare, y=used)) +
   facet_wrap(~Season)
 
-ggplot(hr) +
+ggplot(pt) +
   geom_hex(aes(x=crops, y=used)) +
   geom_smooth(aes(x=crops, y=used)) +
   facet_wrap(~Season)
 
-ggplot(hr) +
+ggplot(pt) +
   geom_hex(aes(x=water, y=used)) +
   geom_smooth(aes(x=water, y=used)) +
   facet_wrap(~Season)
 
 #4b. VIF----
-covs.vif <- hr.breed %>% 
+covs.vif <- pt.breed %>% 
   dplyr::select(tree.s, crops.s, bare.s, water.s, grass.s, shrub.s)
 
 M <- cor(covs.vif, use="complete.obs")
@@ -293,30 +293,30 @@ corrplot(M)
 
 vif(covs.vif)
 vif(covs.vif %>% dplyr::select(-grass.s, -shrub.s))
-#should probably take out grass and shrub
+#should probably take out grass and sptub
 
 #4c. Variables for model----
 
 #number of choice sets
-nsets <- length(unique(hr.breed$ptID))
+nsets <- length(unique(pt.breed$ptID))
   
 #a vector identifying how many alternatives (including the chosen one) are available for each choice set.
 nchoices <- rep(21, nsets)
   
 #a sets-by-alternatives matrix of 0 (available) and 1(used) values.  So if there are 100 choice sets, each with 20 possible choices, this is a 100-by-20 matrix
-y <- matrix(hr.breed$used, nrow=nsets, ncol=nchoices, byrow=TRUE)
+y <- matrix(pt.breed$used, nrow=nsets, ncol=nchoices, byrow=TRUE)
   
 #a vector that is the same length as the number of choice sets, specifying a numeric bird id.  The smallest number in this vector must be 1, and the largest must be equivalent to the number of unique birds.  
-hr.breed.bird <- hr.breed %>% 
+pt.breed.bird <- pt.breed %>% 
   dplyr::select(BirdID, ptID) %>% 
   unique()
-bird <- hr.breed.bird$BirdID
+bird <- pt.breed.bird$BirdID
   
 #a matrix with the same dimensions as y that specifies the first explanatory variable for each set-by-choice combination
-X1 <- matrix(hr.breed$tree.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-X2 <- matrix(hr.breed$crops.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-X3 <- matrix(hr.breed$bare.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-X4 <- matrix(hr.breed$water.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+X1 <- matrix(pt.breed$tree.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+X2 <- matrix(pt.breed$crops.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+X3 <- matrix(pt.breed$bare.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+X4 <- matrix(pt.breed$water.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
 
 #max value in the bird vector above (i.e., an integer representing how many unique birds there are)
 nbirds <- max(bird)
@@ -355,7 +355,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
     ysim[i,1:nchoices[i]] ~ dmulti(p[i,1:nchoices[i]],1)    
     
     for(j in 1:nchoices[i]){    
-    log(phi[i,j]) <- beta1[bird[i]]*X1[i,j]    
+    log(phi[i,j]) <- beta1[bird[i]]*X1[i,j] + beta2[bird[i]]*X2[i,j]+ beta3[bird[i]]*X3[i,j]+ beta4[bird[i]]*X4[i,j] 
     p[i,j] <- phi[i,j]/(sum(phi[i,1:nchoices[i]]))    
     
     D1[i,j] <- pow(y[i,j] - p[i,j], 2)    
@@ -398,13 +398,11 @@ summary(outM)
 
 #Rhat
 outM[["Rhat"]]
-#beta 2,3,4 not great
 
 #Traceplots
 jagsUI::traceplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4"))
 jagsUI::traceplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4"))
 jagsUI::traceplot(outM, parameters = c("fit.data", "fit.sim", "bpv"))
-#same same, esp for sigma
 
 #Density plots
 jagsUI::densityplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4"))
@@ -415,3 +413,6 @@ jagsUI::densityplot(outM, parameters = c("fit.data", "fit.sim", "bpv"))
 #Bayesian p value
 jagsUI::whiskerplot(outM, parameters = c("fit.data", "fit.sim", "bpv"))
 summary(outM[["sims.list"]][["bpv"]])
+
+#5. Betas----
+outM[["summary"]][c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4"),]
