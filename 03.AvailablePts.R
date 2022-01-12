@@ -12,7 +12,7 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
   arrange(ptID)
 
 #3. Point level: Random points within 200 m----
-n.pt <- 20
+n.pt <- 50
 
 IDs <- data.frame(ptID = rep(dat.hab$ptID, n.pt)) %>% 
   arrange(ptID)
