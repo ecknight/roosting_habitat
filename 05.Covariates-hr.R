@@ -5,12 +5,16 @@ library(rgee)
 library(data.table)
 
 #1. Initialize rgee----
+#ee_install()
 ee_Initialize()
 ee_check()
 
 #2. Settings---
 #Buffer radius
 rad <- 200
+
+#Sample size
+n <- 25
 
 #3. Write functions----
 
@@ -28,7 +32,7 @@ buffer_points <- function(feature){
 }
 
 #4. Import data----
-data.raw <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting_5km.csv", header = T)
+data.raw <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting_hr.csv", header = T)
 
 trackingdata <- data.raw %>% 
   st_as_sf(coords = c('X','Y'), crs = 3857) %>% 
@@ -171,7 +175,6 @@ for(i in 1:nrow(files.evi)){
     dplyr::filter(datediff == mindiff) %>%
     sample_n(1) %>% 
     ungroup() %>% 
-    mutate(year = year.i) %>% 
     unique()
   
   data.evi <- rbind(data.evi, data.file)
@@ -203,7 +206,7 @@ data.covs <- data.all %>%
   rename_with(~gsub(pattern="water-", replacement="", .x)) %>% 
   mutate(water = permanent + seasonal) %>% 
   left_join(dat.hab) %>% 
-  dplyr::select(PinpointID, ptID, Radius, Type, timestamp, Season, Winter, datediff, evi, bare, crops, grass, moss, shrub, tree, water) %>% 
+  dplyr::select(PinpointID, ptID, Radius, Type, timestamp, Season, Winter, X, Y, datediff, evi, bare, crops, grass, moss, shrub, tree, water) %>% 
   dplyr::filter(!is.na(tree),
                 !is.na(evi),
                 !Season=="WinterMig")
@@ -213,7 +216,7 @@ pt.n.0 <- table(data.covs$ptID, data.covs$Type) %>%
   data.frame() %>% 
   rename(ptID=Var1, Type=Var2) %>% 
   dplyr::filter(Type=="Available",
-                Freq < 20) 
+                Freq < n) 
 table(pt.n.0$Freq)
 
 pt.n.1 <- table(data.covs$ptID, data.covs$Type) %>% 
@@ -231,7 +234,7 @@ set.seed(1234)
 data.sub <- data.n %>% 
   dplyr::filter(Type=="Available") %>% 
   group_by(ptID) %>% 
-  sample_n(20) %>% 
+  sample_n(n) %>% 
   ungroup() %>% 
   rbind(data.n %>% 
               dplyr::filter(Type=="Used")) %>% 
