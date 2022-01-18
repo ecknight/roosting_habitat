@@ -11,6 +11,9 @@ library(data.table)
 ee_Initialize()
 ee_check()
 
+#2. Settings----
+n <- 25
+
 #2. Write functions----
 #2a. Function to add property with time in milliseconds
 add_date<-function(feature) {
@@ -131,11 +134,13 @@ for(i in 1:length(years)){
   
 }
 
-#18. Convert to dataframe----
+#18. Convert to dataframe & save----
 data.all <- rbindlist(data.out, fill=TRUE) %>% 
   mutate(doy = yday(ymd_hms(timestamp))) %>% 
   right_join(trackingdata) %>% 
   unique()
+
+write.csv(data.all, "Data/Covariates_pt_raw.csv")
 
 data.n <- table(data.all$ptIDn) %>% 
   data.frame() %>% 
@@ -170,7 +175,7 @@ pt.n.0 <- table(data.covs$ptID, data.covs$Type) %>%
   data.frame() %>% 
   rename(ptID=Var1, Type=Var2) %>% 
   dplyr::filter(Type=="Available",
-                Freq < 20) 
+                Freq < n) 
 table(pt.n.0$Freq)
 
 pt.n.1 <- table(data.covs$ptID, data.covs$Type) %>% 
@@ -190,7 +195,7 @@ data.sub <- data.n %>%
   rbind(data.n %>% 
           dplyr::filter(Type=="Available") %>% 
           group_by(ptID) %>% 
-          sample_n(20) %>% 
+          sample_n(n) %>% 
           ungroup()) %>% 
   mutate(used = ifelse(Type=="Used", 1, 0))
 
