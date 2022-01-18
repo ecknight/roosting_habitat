@@ -16,6 +16,11 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
   mutate(PtYear = year(ymd(Date))) %>% 
   anti_join(ids.exclude)
 
+dat.mig <- read.csv("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/DataPaper/coni_migration_data/01_PinPoint2217_StopoverClassified.csv") %>% 
+  dplyr::filter(stopover==1,
+                count >= 5) %>% 
+  mutate(ID = paste0("2217-", season, "-", cluster))
+
 #2. Identify individuals that don't have enough points for KDE ----
 dat.use <- dat.hab   %>% 
   dplyr::filter(Season %in% c("Breed", "Winter")) %>% 
@@ -28,12 +33,12 @@ ids <- data.frame(table(dat.use$PinpointID, dat.use$Season, dat.use$Winter)) %>%
   mutate(PinpointID = as.integer(as.character(PinpointID)),
          Winter = as.integer(as.character(Winter)))
 
-#3. Separate data into KDE and not----
+#3. Separate data into KDE and not and add migration stopover points----
 #remove banding points for these
 dat.kde <- dat.use %>% 
   inner_join(ids) %>% 
-  mutate(ID=paste0(PinpointID, "-", Season, "-", Winter))
-table(dat.kde$PinpointID, dat.kde$Winter)
+  mutate(ID=paste0(PinpointID, "-", Season, "-", Winter)) %>% 
+  dplyr::select(ID, PinpointID, Population, Mass, Wing, Sex, Winter, Long, Lat)
 
 #4. Reproject to UTM
 dat.kde.m <- dat.kde %>% 
@@ -49,7 +54,6 @@ dat.kde.sp <- SpatialPointsDataFrame(coords=dat.kde.m,
 kd <- kernelUD(dat.kde.sp, grid = 1000, extent=2, h="href", same4all=FALSE)
 
 #6. Calculate area of 95% isopleth----
-#Calculate area----
 kd.area<- kernel.area(kd, percent=95,
                            unin="m", unout="km2",
                            standardize = FALSE) %>% 
@@ -73,14 +77,7 @@ dat.area <- kd.area %>%
   ungroup() %>% 
   dplyr::select(PinpointID, Population, Season, Winter, count, Sex, Mass, Wing, HRarea) %>% 
   unique() %>% 
-  mutate(radius = sqrt(HRarea/3.1416))
-
-table(dat.area$PinpointID)
-
-write.csv(dat.area, "KDEArea.csv", row.names = FALSE)
-
-#8. Effects on home range size----
-dat.area <- read.csv("KDEArea.csv") %>% 
+  mutate(radius = sqrt(HRarea/3.1416)) %>% 
   left_join(dat.hab %>% 
               dplyr::filter(Season %in% c("Breed", "Winter")) %>% 
               group_by(PinpointID, Winter) %>% 
@@ -88,6 +85,12 @@ dat.area <- read.csv("KDEArea.csv") %>%
                         Long=mean(Long)) %>% 
               ungroup())
 
+table(dat.area$PinpointID)
+
+#write.csv(dat.area, "KDEArea.csv", row.names = FALSE)
+
+#8. Effects on home range size----
+#Visualize
 ggplot(dat.area) +
   geom_point(aes(x=count, y=HRarea, colour=factor(Sex))) +
   facet_wrap(~Season, scales="free") #Seems like maybe a relationship for breeding but not for winter
@@ -96,29 +99,16 @@ ggplot(dat.area %>% dplyr::filter(Wing > 0)) +
   geom_point(aes(x=Wing, y=HRarea, colour=factor(Sex))) +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat.area %>% dplyr::filter(Wing > 0)) +
+ggplot(dat.area) +
   geom_point(aes(x=Lat, y=HRarea, colour=factor(Sex))) +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat.area %>% dplyr::filter(Wing > 0)) +
+ggplot(dat.area) +
   geom_point(aes(x=Long, y=HRarea, colour=factor(Sex))) +
   facet_wrap(~Season, scales="free")
 
-dat.area.breed <- dat.area %>% 
-  dplyr::filter(Season=="Breed") %>% 
-  dplyr::select(PinpointID, Population, Sex, count, HRarea) %>% 
-  unique() %>% 
-  mutate(season="breed")
-dat.area.winter <- dat.area %>% 
-  dplyr::filter(Season=="Winter") %>% 
-  dplyr::select(PinpointID, Population, Sex, count, HRarea) %>% 
-  unique() %>% 
-  mutate(season="winter")
-
-dat.area.lm <- rbind(dat.area.breed, dat.area.winter)
-
 #Test for effects of season, sex, sample size
-lm.season <- lm(HRarea ~ season*count + season*Sex, data=dat.area.lm, na.action="na.fail")
+lm.season <- lm(HRarea ~ Season*count + Season*Sex, data=dat.area, na.action="na.fail")
 dredge(lm.season)
 summary(lm.season)
 
@@ -133,27 +123,68 @@ ggplot(pred.area) +
   geom_point(aes(x=Sex, y=fit, colour=season))
 #  geom_point(aes(x=Sex, y=HRarea, colour=season), data=dat.area.lm)
 
-#9. Mean HR area----
-area.breed <- dat.area.breed %>% 
-  summarize(area.mean=mean(HRarea),
-            area.sd=sd(HRarea),
-            area.max=max(HRarea)) %>% 
-  mutate(season="Breed")
+#10. Calculate KDE for stopover data----
+dat.mig.m <- dat.mig %>% 
+  st_as_sf(coords=c("Longitude", "Latitude"), crs=4326) %>% 
+  st_transform(crs=3857) %>% 
+  st_coordinates()
 
-area.winter <- dat.area.winter %>% 
-  summarize(area.mean=mean(HRarea),
-            area.sd=sd(HRarea),
-            area.max=max(HRarea)) %>% 
-  mutate(season="Winter")
+dat.mig.sp <- SpatialPointsDataFrame(coords=dat.mig.m, 
+                                     data=data.frame(dat.mig$ID),
+                                     proj4string = CRS("+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +a=6378137 +b=6378137 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs "))
 
-area <- rbind(area.winter, area.breed) %>% 
+kd <- kernelUD(dat.mig.sp, grid = 1000, extent=2, h="href", same4all=FALSE)
+
+#11. Calculate area of 95% isopleth for stopover data----
+kd.mig.area<- kernel.area(kd, percent=95,
+                      unin="m", unout="km2",
+                      standardize = FALSE) %>% 
+  data.frame() %>% 
+  transpose(keep.names="ID") %>% 
+  mutate(ID=str_sub(ID, 2, 30)) %>% 
+  rename(HRarea=V1) %>% 
+  separate(ID, into=c("PinpointID", "season", "cluster")) %>% 
+  mutate(PinpointID = as.integer(PinpointID),
+         cluster=as.integer(cluster))
+
+#12. Put together and calculate means----
+dat.area.all <- kd.mig.area %>% 
+  left_join(dat.mig) %>% 
+  group_by(PinpointID, season, cluster) %>% 
+  summarize(Lat = mean(Latitude),
+            Long = mean(Longitude),
+            HRarea = mean(HRarea)) %>% 
+  ungroup() %>% 
+  rename(Season = season,
+         id = cluster) %>% 
+  mutate(Sex = "M") %>% 
+  rbind(dat.area %>% 
+          rename(id = Winter) %>% 
+          dplyr::select(PinpointID, Season, id, Lat, Long, HRarea, Sex))  %>% 
+  mutate(migseason = Season,
+         Season = ifelse(Season %in% c("fallmig", "springmig"), "migration", Season))
+
+
+area <- dat.area.all %>% 
+  group_by(Season, Sex) %>% 
+  summarize(area.mean = mean(HRarea),
+            area.sd = sd(HRarea)) %>% 
+  ungroup() %>% 
+  rbind(dat.area.all %>% 
+          group_by(Season) %>% 
+          summarize(area.mean = mean(HRarea),
+                    area.sd = sd(HRarea)) %>% 
+          ungroup() %>% 
+          mutate(Sex = NA)) %>% 
   mutate(radius.mean = sqrt(area.mean/3.1416),
          radius.sd = sqrt(area.sd/3.1416))
 area
 
 write.csv(area, "KDEAreaMean.csv", row.names = FALSE)
 
-#10. Save out one individual for an example as shapefiles----
+#TO DO: NEED TO PULL OUT SAMPLE SIZES FOR THESE####
+
+#13. Save out one individual for an example as shapefiles----
 dat.kde.i <- dat.kde %>% 
   dplyr::filter(PinpointID==825)
 
