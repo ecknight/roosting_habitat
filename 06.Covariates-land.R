@@ -175,7 +175,6 @@ for(i in 1:nrow(files.evi)){
     dplyr::filter(datediff == mindiff) %>%
     sample_n(1) %>% 
     ungroup() %>% 
-    mutate(year = year.i) %>% 
     unique()
   
   data.evi <- rbind(data.evi, data.file)
@@ -207,7 +206,7 @@ data.covs <- data.all %>%
   rename_with(~gsub(pattern="water-", replacement="", .x)) %>% 
   mutate(water = permanent + seasonal) %>% 
   left_join(dat.hab) %>% 
-  dplyr::select(PinpointID, ptID, Radius, Type, timestamp, Season, Winter, datediff, evi, bare, crops, grass, moss, shrub, tree, water) %>% 
+  dplyr::select(PinpointID, ptID, Radius, Type, timestamp, Season, Winter, X, Y, datediff, evi, bare, crops, grass, moss, shrub, tree, water) %>% 
   dplyr::filter(!is.na(tree),
                 !is.na(evi),
                 !Season=="WinterMig")
@@ -217,7 +216,7 @@ pt.n.0 <- table(data.covs$ptID, data.covs$Type) %>%
   data.frame() %>% 
   rename(ptID=Var1, Type=Var2) %>% 
   dplyr::filter(Type=="Available",
-                Freq < 20) 
+                Freq < 40) 
 table(pt.n.0$Freq)
 
 pt.n.1 <- table(data.covs$ptID, data.covs$Type) %>% 
@@ -235,7 +234,7 @@ set.seed(1234)
 data.sub <- data.n %>% 
   dplyr::filter(Type=="Available") %>% 
   group_by(ptID) %>% 
-  sample_n(20) %>% 
+  sample_n(40) %>% 
   ungroup() %>% 
   rbind(data.n %>% 
           dplyr::filter(Type=="Used")) %>% 
