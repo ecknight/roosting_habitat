@@ -5,6 +5,7 @@ library(data.table)
 library(adehabitatLT)
 library(meanShiftR) #for density cluster analysis
 library(sf)
+library(rworldmap)
 
 options(scipen = 999)
 
@@ -207,6 +208,7 @@ ggsave(plot.breed, file="Figures/MeanShift_Breed.jpeg", width=20, height=10, uni
 
 #10. Fall migration----
 dat.fall <- dat.clust %>% 
+  dplyr::select(PinpointID, Population, Mass, Wing, Sex, Type, DateTime, Date, doy, Time, sun, Year, Lat, Long, BandDist, WintDist, GCD,  dist, R2n, abs.angle, rel.angle, cluster, count, Season2) %>% 
   anti_join(dat.wint) %>% 
   anti_join(dat.wintmig) %>% 
   anti_join(dat.breed) %>% 
@@ -219,6 +221,7 @@ dat.fall <- dat.clust %>%
 
 #11. Spring migration----
 dat.spring <- dat.clust %>% 
+  dplyr::select(PinpointID, Population, Mass, Wing, Sex, Type, DateTime, Date, doy, Time, sun, Year, Lat, Long, BandDist, WintDist, GCD,  dist, R2n, abs.angle, rel.angle, cluster, count, Season2) %>% 
   anti_join(dat.wint) %>% 
   anti_join(dat.wintmig) %>% 
   anti_join(dat.breed) %>% 
@@ -241,8 +244,6 @@ dat.roost <- dat.all %>%
 
 table(dat.roost$Season, dat.roost$PinpointID)
 
-write.csv(dat.roost, "Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv", row.names = FALSE)
-
 #Visualize
 plot.shift <- ggplot() +
   geom_polygon(data=whemi, aes(x=long, y=lat, group=group), colour = "gray85", fill = "gray75", size=0.3) +
@@ -255,7 +256,22 @@ plot.shift <- ggplot() +
 
 ggsave(plot.shift, file="Figures/MeanShift_Map.jpeg", width=20, height=10, unit="in")
 
-#14. Final numebrs----
+#14. Assign country to each point & remove points over the gulf----
+countries <- getMap(resolution='low')
+points <- dat.roost %>% 
+  dplyr::select(Long, Lat) %>% 
+  SpatialPoints(proj4string = CRS(proj4string(countries)))
+points.country <- over(points, countries)
+
+dat.country <- dat.roost %>% 
+  mutate(country = as.character(points.country$ADMIN),
+         region = as.character(points.country$continent)) %>% 
+  dplyr::filter(!is.na(country)) %>% 
+  arrange(PinpointID, DateTime)
+
+write.csv(dat.country, "Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv", row.names = FALSE)
+
+#15. Final numebrs----
 length(unique(dat.roost$PinpointID))
 length(unique(dat.roost$Population))
 nrow(dat.roost)
