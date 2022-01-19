@@ -18,19 +18,10 @@ hr <- read.csv("Data/Covariates_hr.csv") %>%
   cbind(read.csv("Data/Covariates_hr.csv") %>% 
           dplyr::select(-X, -Y))
 
-land <- read.csv("Data/Covariates_land.csv") %>% 
-  st_as_sf(coords=c("X", "Y"), crs=4326) %>% 
-  st_transform(crs=3857) %>% 
-  st_coordinates() %>% 
-  cbind(read.csv("Data/Covariates_land.csv") %>% 
-          dplyr::select(-X, -Y))
-
-dat <- rbind(pt, hr, land) %>% 
-  mutate(scale = case_when(Radius=="200m" ~ "pt",
-                           Radius=="5km" ~ "hr",
-                           Radius=="100km" ~ "land")) %>% 
+dat <- rbind(pt, hr) %>% 
   mutate(water2 = water^2,
-         water2.s = water.s^2)
+         water2.s = water.s^2,
+         scale = Radius)
 
 #2. Visualize covs for polynomials----
 ggplot(dat, aes(x=tree, y=used, colour=scale)) + 
@@ -82,7 +73,7 @@ for(i in 1:nrow(loop)){
   nsets <- length(unique(dat.i$ptID))
   
   #a vector identifying how many alternatives (including the chosen one) are available for each choice set.
-  nchoices <- rep(41, nsets)
+  nchoices <- rep(26, nsets)
   
   #a sets-by-alternatives matrix of 0 (available) and 1(used) values.  So if there are 100 choice sets, each with 20 possible choices, this is a 100-by-20 matrix
   y <- matrix(dat.i$used, nrow=nsets, ncol=nchoices, byrow=TRUE)
@@ -99,7 +90,7 @@ for(i in 1:nrow(loop)){
   X3 <- matrix(dat.i$crops.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
   X4 <- matrix(dat.i$water.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
   
-  if((scale.i=="land" & season.i!="Winter") | (scale.i=="pt" & season.i=="Breed")){
+  if(scale.i=="land" & season.i!="Winter"){
     X5 <- matrix(dat.i$water2.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
   }
 
@@ -108,28 +99,28 @@ for(i in 1:nrow(loop)){
   
   #5. Model specification----
   
-  if((scale.i=="land" & season.i!="Winter") | (scale.i=="pt" & season.i=="Breed")){
+  if(scale.i=="land" & season.i!="Winter"){
     sink("Mixed model.txt")
     cat("model{    
 #Priors
 mu.beta1 ~ dnorm(0, 0.01)
-tau.beta1 ~ dgamma(0.1, 0.1)
+tau.beta1 ~ dgamma(10, 0.1)
 sigma.beta1 <- 1/sqrt(tau.beta1)
 
 mu.beta2 ~ dnorm(0, 0.01)
-tau.beta2 ~ dgamma(0.1, 0.1)
+tau.beta2 ~ dgamma(10, 0.1)
 sigma.beta2 <- 1/sqrt(tau.beta2)
 
 mu.beta3 ~ dnorm(0, 0.01)
-tau.beta3 ~ dgamma(0.1, 0.1)
+tau.beta3 ~ dgamma(10, 0.1)
 sigma.beta3 <- 1/sqrt(tau.beta3)
 
 mu.beta4 ~ dnorm(0, 0.01)
-tau.beta4 ~ dgamma(0.1, 0.1)
+tau.beta4 ~ dgamma(10, 0.1)
 sigma.beta4 <- 1/sqrt(tau.beta4)  
 
 mu.beta5 ~ dnorm(0, 0.01)
-tau.beta5 ~ dgamma(0.1, 0.1)
+tau.beta5 ~ dgamma(10, 0.1)
 sigma.beta5 <- 1/sqrt(tau.beta5)  
 
 for(b in 1:nbirds){    
@@ -170,19 +161,19 @@ beta5[b] ~ dnorm(mu.beta5, tau.beta5)
     cat("model{    
 #Priors
 mu.beta1 ~ dnorm(0, 0.01)
-tau.beta1 ~ dgamma(0.1, 0.1)
+tau.beta1 ~ dgamma(10, 0.1)
 sigma.beta1 <- 1/sqrt(tau.beta1)
 
 mu.beta2 ~ dnorm(0, 0.01)
-tau.beta2 ~ dgamma(0.1, 0.1)
+tau.beta2 ~ dgamma(10, 0.1)
 sigma.beta2 <- 1/sqrt(tau.beta2)
 
 mu.beta3 ~ dnorm(0, 0.01)
-tau.beta3 ~ dgamma(0.1, 0.1)
+tau.beta3 ~ dgamma(10, 0.1)
 sigma.beta3 <- 1/sqrt(tau.beta3)
 
 mu.beta4 ~ dnorm(0, 0.01)
-tau.beta4 ~ dgamma(0.1, 0.1)
+tau.beta4 ~ dgamma(10, 0.1)
 sigma.beta4 <- 1/sqrt(tau.beta4)  
 
 for(b in 1:nbirds){    
@@ -220,7 +211,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
   
   #6. JAGS parameters----
   #Specify data for JAGS
-  if((scale.i=="land" & season.i!="Winter") | (scale.i=="pt" & season.i=="Breed")){
+  if(scale.i=="land" & season.i!="Winter"){
     win.data = list(y=y, nsets=nsets,  nchoices=nchoices, bird=bird, X1=X1, X2=X2, X3=X3, X4=X4, X5=X5, nbirds=nbirds)
   }
   else{
@@ -231,7 +222,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
   inits = function()list(mu.beta1=rnorm(1), tau.beta1=runif(1))
   
   #Specify parameters to track
-  if((scale.i=="land" & season.i!="Winter") | (scale.i=="pt" & season.i=="Breed")){
+  if(scale.i=="land" & season.i!="Winter"){
     params = c("mu.beta1", "sigma.beta1", "beta1",  
                "mu.beta2", "sigma.beta2", "beta2",           
                "mu.beta3", "sigma.beta3", "beta3",           
@@ -293,7 +284,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
            season=season.i)
   summary.list[[i]]$val <- row.names(outM$summary)
   
-  if((scale.i=="land" & season.i!="Winter") | (scale.i=="pt" & season.i=="Breed")){
+  if(scale.i=="land" & season.i!="Winter"){
     betas.list[[i]] <- data.frame(beta1=outM$sims.list$mu.beta1,
                                   beta2=outM$sims.list$mu.beta2,
                                   beta3=outM$sims.list$mu.beta3,
@@ -333,8 +324,8 @@ betas <- rbindlist(betas.list) %>%
 fit <- rbindlist(fit.list)
 
 #11. Inspect traceplots
-outM <- readRDS("Models/DiscreteChoice_land_Winter.RDS")
-summary(outM)
+outM <- readRDS("Models/DiscreteChoice_pt_SpringMig.RDS")
+#summary(outM)
 jagsUI::traceplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5"))
 jagsUI::traceplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4", "sigma.beta5"))
 #non-convergence: landscape winter (REs only), landscape fall - evi sigma, landscape breed (REs only), hr breed (REs only), hr winter (REs only), pt winter (REs only), pt breed (REs only)
@@ -348,7 +339,7 @@ overlap <- summary %>%
                          val=="mu.beta4" ~ "water",
                          val=="mu.beta5" ~ "water2"))
 
-overlap$scale <- factor(overlap$scale, levels=c("pt", "hr", "land"))
+overlap$scale <- factor(overlap$scale, levels=c("pt", "hr"))
 
 overlap.0 <- overlap %>% 
   dplyr::filter(overlap0==0,
@@ -386,11 +377,11 @@ ggplot(betas %>%
   geom_vline(aes(xintercept=0)) +
   facet_grid(scale ~ season, scales="free")
 
-#save.image("CONIRoosting_WorkSpace2.Rdata")
+save.image("CONIRoosting_WorkSpace2.Rdata")
 #load("CONIRoosting_WorkSpace.Rdata")
 
 #14. Sum of selection strength----
-betas.sum <- betas %>% 
+betas.sum <- betas.0 %>% 
   dplyr::select(scale, season, value, upper, lower) %>% 
   unique() %>% 
   group_by(scale, season) %>% 
