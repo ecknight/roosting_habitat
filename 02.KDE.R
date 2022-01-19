@@ -10,16 +10,14 @@ library(gridExtra)
 options(scipen = 999)
 
 #1. Read in data----
-ids.exclude <- read.csv("Data/ExclusionYearForBirdsWith2BreedingYears.csv")
+ids.exclude <- read.csv("Data/ExclusionYearForBirdsWith2BreedingYears.csv") 
 
 dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
-  mutate(PtYear = year(ymd(Date))) %>% 
-  anti_join(ids.exclude)
-
-dat.mig <- read.csv("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/DataPaper/coni_migration_data/01_PinPoint2217_StopoverClassified.csv") %>% 
-  dplyr::filter(stopover==1,
-                count >= 5) %>% 
-  mutate(ID = paste0("2217-", season, "-", cluster))
+  mutate(PtYear = year(ymd_hms(DateTime))) %>% 
+  anti_join(ids.exclude) %>% 
+  dplyr::mutate(doy = yday(ymd_hms(DateTime)),
+                Season = case_when(PinpointID==2217 & doy %in% c(157:160) ~ "SpringMig",
+                                   !is.na(Season) ~ Season))
 
 #2. Identify individuals that don't have enough points for KDE ----
 dat.use <- dat.hab   %>% 
@@ -38,7 +36,7 @@ ids <- data.frame(table(dat.use$PinpointID, dat.use$Season, dat.use$Winter)) %>%
 dat.kde <- dat.use %>% 
   inner_join(ids) %>% 
   mutate(ID=paste0(PinpointID, "-", Season, "-", Winter)) %>% 
-  dplyr::select(ID, PinpointID, Population, Mass, Wing, Sex, Winter, Long, Lat)
+  dplyr::select(ID, PinpointID, Season, Population, Mass, Wing, Sex, Winter, Long, Lat)
 
 #4. Reproject to UTM
 dat.kde.m <- dat.kde %>% 
@@ -87,7 +85,7 @@ dat.area <- kd.area %>%
 
 table(dat.area$PinpointID)
 
-#write.csv(dat.area, "KDEArea.csv", row.names = FALSE)
+write.csv(dat.area, "KDEArea.csv", row.names = FALSE)
 
 #8. Effects on home range size----
 #Visualize
@@ -108,24 +106,34 @@ ggplot(dat.area) +
   facet_wrap(~Season, scales="free")
 
 #Test for effects of season, sex, sample size
-lm.season <- lm(HRarea ~ Season*count + Season*Sex, data=dat.area, na.action="na.fail")
-dredge(lm.season)
+lm.season <- lm(HRarea ~ Season*count, data=dat.area, na.action="na.fail")
+dredge(lm.season, rank="AIC")
+dredge(lm.season, rank="AICc")
 summary(lm.season)
 
-lm.area.use <- lm(HRarea ~ Sex*season, data=dat.area.lm)
+lm.area.use <- lm(HRarea ~ Season, data=dat.area)
 summary(lm.area.use)
-newdat <- data.frame(expand.grid(Sex=unique(dat.area.lm$Sex), season=unique(dat.area.lm$season)))
+newdat <- data.frame(expand.grid(Sex=unique(dat.area$Sex), Season=unique(dat.area$Season)))
 pred.area <- data.frame(predict(lm.area.use, newdat, se=TRUE)) %>% 
   cbind(newdat)
 
 ggplot(pred.area) +
 #  geom_ribbon(aes(x=count, ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit, group=season), fill="grey85") +
-  geom_point(aes(x=Sex, y=fit, colour=season))
+  geom_point(aes(x=Sex, y=fit, colour=Season))
 #  geom_point(aes(x=Sex, y=HRarea, colour=season), data=dat.area.lm)
 
-#10. Calculate KDE for stopover data----
+#9. Calculate KDE for stopover data----
+dat.mig <- dat.hab %>% 
+  dplyr::filter(Season %in% c("FallMig", "SpringMig")) %>% 
+  group_by(PinpointID, Season, cluster) %>% 
+  mutate(count = n()) %>% 
+  ungroup() %>% 
+  dplyr::filter(count >= 5,
+                !is.na(cluster)) %>% 
+  mutate(ID = paste0(PinpointID,"-",Season,"-", cluster))
+
 dat.mig.m <- dat.mig %>% 
-  st_as_sf(coords=c("Longitude", "Latitude"), crs=4326) %>% 
+  st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
   st_transform(crs=3857) %>% 
   st_coordinates()
 
@@ -143,20 +151,27 @@ kd.mig.area<- kernel.area(kd, percent=95,
   transpose(keep.names="ID") %>% 
   mutate(ID=str_sub(ID, 2, 30)) %>% 
   rename(HRarea=V1) %>% 
-  separate(ID, into=c("PinpointID", "season", "cluster")) %>% 
+  separate(ID, into=c("PinpointID", "Season", "cluster")) %>% 
   mutate(PinpointID = as.integer(PinpointID),
-         cluster=as.integer(cluster))
+         cluster=as.integer(cluster)) %>% 
+  left_join(dat.mig %>% 
+              dplyr::select(PinpointID, Season, cluster, count) %>% 
+              unique())
 
-#12. Put together and calculate means----
+#12. Test for effects of sample size & season----
+lm.season <- lm(HRarea ~ Season*count, data=kd.mig.area, na.action="na.fail")
+dredge(lm.season, rank="AIC")
+summary(lm.season)
+
+#13. Put together and calculate means----
 dat.area.all <- kd.mig.area %>% 
   left_join(dat.mig) %>% 
-  group_by(PinpointID, season, cluster) %>% 
-  summarize(Lat = mean(Latitude),
-            Long = mean(Longitude),
+  group_by(PinpointID, Season, cluster) %>% 
+  summarize(Lat = mean(Lat),
+            Long = mean(Long),
             HRarea = mean(HRarea)) %>% 
   ungroup() %>% 
-  rename(Season = season,
-         id = cluster) %>% 
+  rename(id = cluster) %>% 
   mutate(Sex = "M") %>% 
   rbind(dat.area %>% 
           rename(id = Winter) %>% 
@@ -164,20 +179,33 @@ dat.area.all <- kd.mig.area %>%
   mutate(migseason = Season,
          Season = ifelse(Season %in% c("fallmig", "springmig"), "migration", Season))
 
-
 area <- dat.area.all %>% 
   group_by(Season, Sex) %>% 
   summarize(area.mean = mean(HRarea),
-            area.sd = sd(HRarea)) %>% 
+            area.sd = sd(HRarea),
+            n = n()) %>% 
   ungroup() %>% 
   rbind(dat.area.all %>% 
+          mutate(Season = ifelse(Season %in% c("SpringMig", "FallMig"), "Migration", Season)) %>% 
           group_by(Season) %>% 
           summarize(area.mean = mean(HRarea),
-                    area.sd = sd(HRarea)) %>% 
+                    area.sd = sd(HRarea),
+                    n = n()) %>% 
           ungroup() %>% 
           mutate(Sex = NA)) %>% 
   mutate(radius.mean = sqrt(area.mean/3.1416),
-         radius.sd = sqrt(area.sd/3.1416))
+         radius.sd = sqrt(area.sd/3.1416)) %>% 
+  left_join(dat.kde %>% 
+              group_by(PinpointID, Season, Winter) %>% 
+              summarize(n = n()) %>% 
+              ungroup() %>% 
+              rename(id = Winter) %>% 
+              group_by(Season) %>% 
+              summarize(n.mean = mean(n),
+                        n.sd = sd(n),
+                        n.min = min(n),
+                        n.max = max(n)) %>% 
+              ungroup())
 area
 
 write.csv(area, "KDEAreaMean.csv", row.names = FALSE)
