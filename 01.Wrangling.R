@@ -230,7 +230,8 @@ dat.spring <- dat.clust %>%
                 !Type=="Band",
                 !Season2=="WinterMig") %>% 
   mutate(Season="SpringMig",
-         Winter=0)
+         Winter=0) %>% 
+  dplyr::select(PinpointID, Population, Mass, Wing, Sex, Type, DateTime, Date, doy, Time, sun, Year, Lat, Long, BandDist, WintDist, GCD, Season, Winter, dist, R2n, abs.angle, rel.angle, cluster, count)
 
 #12. All data----
 dat.all <- rbind(dat.wint2, dat.wintmig, dat.breed, dat.fall, dat.spring) %>% 
@@ -283,7 +284,7 @@ plot.shift <- ggplot() +
   scale_colour_viridis_d() +
   facet_wrap(~PinpointID, ncol=10)
 
-ggsave(plot.shift, file="Figures/MeanShift_Map.jpeg", width=20, height=10, unit="in")
+#ggsave(plot.shift, file="Figures/MeanShift_Map.jpeg", width=20, height=10, unit="in")
 
 #15. Assign country to each point & remove points over the gulf----
 countries <- getMap(resolution='low')
@@ -301,6 +302,6 @@ dat.country <- dat.roost %>%
 write.csv(dat.country, "Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv", row.names = FALSE)
 
 #16. Final numebrs----
-length(unique(dat.roost$PinpointID))
-length(unique(dat.roost$Population))
-nrow(dat.roost)
+length(unique(dat.country$PinpointID))
+length(unique(dat.country$Population))
+nrow(dat.country)
