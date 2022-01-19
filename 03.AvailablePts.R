@@ -28,7 +28,7 @@ set.seed(1234)
 pts.pt <- st_sample(buff.pt, size=rep(n.pt, nrow(buff.pt))) %>% 
   st_coordinates() %>% 
   data.frame() %>% 
-  cbind(IDs) %>% 
+  cbind(IDs.pt) %>% 
   mutate(DateTime = NA,
          Type="Available",
          Radius="pt")
@@ -93,7 +93,7 @@ set.seed(1234)
 pts.hr <- st_sample(buff.hr, size=rep(n.hr, nrow(buff.hr))) %>% 
   st_coordinates() %>% 
   data.frame() %>% 
-  cbind(IDs) %>% 
+  cbind(IDs.hr) %>% 
   mutate(DateTime = NA,
          Type="Available",
          Radius="hr")
