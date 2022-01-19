@@ -6,6 +6,7 @@ library(adehabitatLT)
 library(meanShiftR) #for density cluster analysis
 library(sf)
 library(rworldmap)
+library(readxl)
 
 options(scipen = 999)
 
@@ -229,17 +230,45 @@ dat.spring <- dat.clust %>%
                 !Type=="Band",
                 !Season2=="WinterMig") %>% 
   mutate(Season="SpringMig",
-         Winter=0) %>% 
-  dplyr::select(PinpointID, Population, Mass, Wing, Sex, Type, DateTime, Date, doy, Time, sun, Year, Lat, Long, BandDist, WintDist, GCD, Season, Winter, dist, R2n, abs.angle, rel.angle, cluster, count)
+         Winter=0)
 
 #12. All data----
-dat.all <- rbind(dat.wint2, dat.wintmig, dat.breed, dat.fall, dat.spring)
+dat.all <- rbind(dat.wint2, dat.wintmig, dat.breed, dat.fall, dat.spring) %>% 
+  dplyr::select(PinpointID, Population, Mass, Wing, Sex, Type, DateTime, Year, sun, Lat, Long, Season, Winter, cluster, count) %>% 
+  mutate(cluster = as.numeric(cluster))
 
 table(dat.all$Season, dat.all$PinpointID)
-write.csv(dat.all, "Data/CONIMCP_CleanDataAll_Habitat.csv", row.names = FALSE)
 
-#13. Just roosting data---
-dat.roost <- dat.all %>% 
+#13. Add archival pinpoint tag data----
+band <- read_excel("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/Data/tbl_band.xlsx") %>% 
+  dplyr::filter(PinpointID=="2217")
+
+dat.2217 <- read.csv("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/DataPaper/coni_migration_data/01_PinPoint2217_StopoverClassified.csv") %>% 
+  rename(Lat = Latitude, Long = Longitude, Season = season, DateTime = date) %>% 
+  mutate(PinpointID=2217,
+         Population = 8,
+         Type="Retrieval",
+         DateTime = ymd_hms(DateTime),
+         sunrise= ymd_hms(sunrise),
+         sunset = ymd_hms(sunset),
+         Year = year(DateTime),
+         sun = ifelse(DateTime > sunrise & DateTime < sunset, 1, 0),
+         Winter = ifelse(Season=="Winter", 1, 0),
+         Mass = band$Mass, 
+         Wing = band$Wing,
+         Sex = band$Sex,
+         Season = case_when(Season=="breed" ~ "Breed",
+                            Season=="winter" ~ "Winter",
+                            Season=="fallmig" ~ "FallMig",
+                            Season=="springmig" ~ "SpringMig")) %>% 
+    dplyr::select(PinpointID, Population, Mass, Wing, Sex, Type, DateTime, Year, sun, Lat, Long, Season, Winter, cluster, count)
+
+dat.all.2217 <- rbind(dat.all, dat.2217)
+
+write.csv(dat.all.2217, "Data/CONIMCP_CleanDataAll_Habitat.csv", row.names = FALSE)
+
+#14. Just roosting data---
+dat.roost <- dat.all.2217 %>% 
   dplyr::filter(sun==1 | Type=="Band")
 
 table(dat.roost$Season, dat.roost$PinpointID)
@@ -256,7 +285,7 @@ plot.shift <- ggplot() +
 
 ggsave(plot.shift, file="Figures/MeanShift_Map.jpeg", width=20, height=10, unit="in")
 
-#14. Assign country to each point & remove points over the gulf----
+#15. Assign country to each point & remove points over the gulf----
 countries <- getMap(resolution='low')
 points <- dat.roost %>% 
   dplyr::select(Long, Lat) %>% 
@@ -271,7 +300,7 @@ dat.country <- dat.roost %>%
 
 write.csv(dat.country, "Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv", row.names = FALSE)
 
-#15. Final numebrs----
+#16. Final numebrs----
 length(unique(dat.roost$PinpointID))
 length(unique(dat.roost$Population))
 nrow(dat.roost)
