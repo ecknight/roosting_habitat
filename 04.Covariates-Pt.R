@@ -22,7 +22,7 @@ add_date<-function(feature) {
 }
 
 #3. Import data----
-trackingdata <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting_200m.csv", header = T) %>% 
+trackingdata <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting_pt.csv", header = T) %>% 
   rename(timestamp=DateTime) %>% 
   arrange(ptID) %>% 
   fill(timestamp, .direction="down") %>% 
