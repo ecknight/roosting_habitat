@@ -5,6 +5,7 @@ library(tidyverse)
 library(lubridate)
 library(rgee)
 library(data.table)
+library(usdm)
 
 #1. Initialize rgee----
 #ee_install()
@@ -188,7 +189,7 @@ data.n <- data.covs %>%
   dplyr::filter(!ptID %in% pt.n.0$ptID,
                 !ptID %in% pt.n.1$ptID)
 
-#22. Randomly sample to 20 available points per point----
+#22. Randomly sample to 25 available points per point----
 set.seed(1234)
 data.sub <- data.n %>% 
   dplyr::filter(Type=="Used") %>% 
@@ -227,3 +228,18 @@ for(i in 1:length(season)){
 
 #24. Write to csv----
 write.csv(data.season, "Data/Covariates_pt.csv", row.names=FALSE)
+
+#25. VIF----
+data.season <- read.csv("Data/Covariates_pt.csv")
+
+data.vif <- data.season %>% 
+  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s)
+cor(data.vif)
+#grass and tree
+vif(data.vif)
+
+data.vif <- data.season %>% 
+  dplyr::select(tree.s, shrub.s, bare.s, crops.s, water.s, evi.s)
+cor(data.vif)
+#grass and tree
+vif(data.vif)
