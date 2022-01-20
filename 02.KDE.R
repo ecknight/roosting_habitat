@@ -85,8 +85,6 @@ dat.area <- kd.area %>%
 
 table(dat.area$PinpointID)
 
-write.csv(dat.area, "KDEArea.csv", row.names = FALSE)
-
 #8. Effects on home range size----
 #Visualize
 ggplot(dat.area) +
@@ -163,7 +161,7 @@ lm.season <- lm(HRarea ~ Season*count, data=kd.mig.area, na.action="na.fail")
 dredge(lm.season, rank="AIC")
 summary(lm.season)
 
-#13. Put together and calculate means----
+#13. Put together----
 dat.area.all <- kd.mig.area %>% 
   left_join(dat.mig) %>% 
   group_by(PinpointID, Season, cluster) %>% 
@@ -179,6 +177,9 @@ dat.area.all <- kd.mig.area %>%
   mutate(migseason = Season,
          Season = ifelse(Season %in% c("fallmig", "springmig"), "migration", Season))
 
+write.csv(dat.area.all, "KDEArea.csv", row.names = FALSE)
+
+#14. Calculate means----
 area <- dat.area.all %>% 
   group_by(Season, Sex) %>% 
   summarize(area.mean = mean(HRarea),
@@ -210,11 +211,13 @@ area
 
 write.csv(area, "KDEAreaMean.csv", row.names = FALSE)
 
-#TO DO: NEED TO PULL OUT SAMPLE SIZES FOR THESE####
-
-#13. Save out one individual for an example as shapefiles----
+#15. Save out one individual for an example as shapefiles----
 dat.kde.i <- dat.kde %>% 
-  dplyr::filter(PinpointID==825)
+  dplyr::filter(ID %in% c("826-Winter-1", "483-Breed-0")) %>% 
+  dplyr::select(ID, Lat, Long) %>% 
+  rbind(dat.mig %>% 
+          dplyr::filter(ID=="2217-SpringMig-9") %>% 
+          dplyr::select(ID, Lat, Long))
 
 dat.kde.m <- dat.kde.i %>% 
   st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
@@ -244,41 +247,7 @@ kd.shp.05 <- getverticeshr(kd, 5) %>%
   mutate(iso=5)
 
 kd.shp <- rbind(kd.shp.95, kd.shp.75, kd.shp.50, kd.shp.25, kd.shp.05) %>% 
-  separate(id, into=c("PinpointID", "Season"), remove=FALSE)
-
-kd.shp.breed <- kd.shp %>% 
-  dplyr::filter(Season=="Breed2")
-dat.kde.i.breed <- dat.kde.i %>% 
-  dplyr::filter(Season=="Breed2") %>% 
-  st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
-  st_transform(crs=3857) %>% 
-  st_coordinates() %>% 
-  data.frame() %>% 
-  cbind(dat.kde.i %>% 
-          dplyr::filter(Season=="Breed2"))
-
-kd.shp.winter <- kd.shp %>% 
-  dplyr::filter(Season=="Winter2")
-dat.kde.i.winter <- dat.kde.i %>% 
-  dplyr::filter(Season=="Winter2") %>% 
-  st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
-  st_transform(crs=3857) %>% 
-  st_coordinates() %>% 
-  data.frame() %>% 
-  cbind(dat.kde.i %>% 
-          dplyr::filter(Season=="Winter2"))
-
-breed <- ggplot() +
-  geom_sf(data=kd.shp.breed, aes(fill=iso)) +
-  geom_point(data=dat.kde.i.breed, aes(x=X, y=Y, colour=doy)) +
-  scale_colour_viridis_c()
-
-winter <- ggplot() +
-  geom_sf(data=kd.shp.winter, aes(fill=iso)) +
-  geom_point(data=dat.kde.i.winter, aes(x=X, y=Y, colour=doy)) +
-  scale_colour_viridis_c()
-
-grid.arrange(breed, winter)
+  separate(id, into=c("PinpointID", "Season", "id"), remove=FALSE) 
 
 write_sf(kd.shp, "Shapefiles/ExampleKDE.shp")
 write.csv(dat.kde.i, "Shapefiles/ExampleKDEData.csv", row.names = FALSE)
