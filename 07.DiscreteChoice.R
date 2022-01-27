@@ -61,7 +61,7 @@ betas.list <- list()
 fit.list <- list()
 
 #for(i in 1:nrow(loop)){
-for(i in 2:2){  
+for(i in c(3:3)){  
   
   #3. Subset data----
   scale.i <- loop$scale[i]
@@ -98,24 +98,24 @@ for(i in 2:2){
   nbirds <- max(bird)
   
   #5. Model specification----
-  
   sink("Mixed model.txt")
   cat("model{    
+  
 #Priors
 mu.beta1 ~ dnorm(0, 0.01)
-tau.beta1 ~ dgamma(7, 0.1)
+tau.beta1 ~ dgamma(0.1, 1)
 sigma.beta1 <- 1/sqrt(tau.beta1)
 
 mu.beta2 ~ dnorm(0, 0.01)
-tau.beta2 ~ dgamma(7, 0.1)
+tau.beta2 ~ dgamma(0.1, 1)
 sigma.beta2 <- 1/sqrt(tau.beta2)
 
 mu.beta3 ~ dnorm(0, 0.01)
-tau.beta3 ~ dgamma(7, 0.1)
+tau.beta3 ~ dgamma(0.1, 1)
 sigma.beta3 <- 1/sqrt(tau.beta3)
 
 mu.beta4 ~ dnorm(0, 0.01)
-tau.beta4 ~ dgamma(7, 0.1)
+tau.beta4 ~ dgamma(0.1, 1)
 sigma.beta4 <- 1/sqrt(tau.beta4)  
 
 for(b in 1:nbirds){    
@@ -165,7 +165,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
              "p", "fit.data", "fit.sim", "bpv")
 
   #Number of chains, iterations, burnin, and thinning 
-  nc=3; ni=300000; nb=100000; nt=50; na=1000 
+  nc=3; ni=200000; nb=100000; nt=50; na=1000 
   
   #7. Run JAGS----
   outM = jags(win.data, inits, params, "Mixed model.txt", n.chains=nc, n.thin=nt, n.iter=ni, n.burnin=nb, parallel=T, n.adapt = 1000)
@@ -205,22 +205,40 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
 model <- rbindlist(model.list)
 summary <- rbindlist(summary.list)
 betas <- rbindlist(betas.list, fill=TRUE) %>% 
-  dplyr::select(-beta5) %>% 
   pivot_longer(beta1:beta4, names_to="beta", values_to="value") 
-fit <- rbindlist(fit.list)
+fit <- rbindlist(fit.list) %>% 
+  mutate(p = ifelse(bpv>1, 1, 0))
 
 #11. Save workspace----
-save.image("CONIRoosting_WorkSpace.Rdata")
-#load("CONIRoosting_WorkSpace.Rdata")
+#save.image("CONIRoosting_WorkSpace.Rdata")
+load("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/CONIRoosting_WorkSpace.Rdata")
 
-#11. Inspect traceplots
-outM <- readRDS("Models/DiscreteChoice_pt_FallMig.RDS")
-summary(outM)
-jagsUI::traceplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5"))
-jagsUI::traceplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4", "sigma.beta5"))
-#fall.pt.water, breed.hr.crop, winter.pt.water - R=1.239, winter.hr.crop
+#12. Save out traceplots----
+for(i in 1:nrow(loop)){
+  
+  outM <- readRDS(paste0("Models/DiscreteChoice_", loop$scale[i], "_", loop$Season[i], ".RDS"))
+  
+  jpeg(paste0("Figures/Traceplots/Traceplot_beta_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
+  jagsUI::traceplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4"))
+  dev.off()
+  
+  jpeg(paste0("Figures/Traceplots/Densityplot_beta_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
+  jagsUI::densityplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4"))
+  dev.off()
+  
+  jpeg(paste0("Figures/Traceplots/Traceplot_sd_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
+  jagsUI::traceplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4"))
+  dev.off()
+  
+  jpeg(paste0("Figures/Traceplots/Densityplot_sd_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
+  jagsUI::densityplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4"))
+  dev.off()
+  
+  print(paste0("Finished traceplots ", i, " of ", nrow(loop)))
+  
+}
 
-#12. Beta overlap----
+#13. Beta overlap----
 overlap <- summary %>% 
   dplyr::filter(val %in% c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5")) %>% 
   mutate(cov = case_when(val=="mu.beta1" ~ "evi",
@@ -240,7 +258,7 @@ overlap.0 <- overlap %>%
 
 table(overlap.0$season, overlap.0$scale)
 
-#13. Density plots----
+#14. Density plots----
 betas$cov <- case_when(betas$beta=="beta1" ~ "evi",
                        betas$beta=="beta2" ~ "tree",
                        betas$beta=="beta3" ~ "crop",
@@ -251,6 +269,8 @@ betas$scale <- factor(betas$scale, levels=c("pt", "hr"))
 betas.0 <- betas %>% 
   right_join(overlap.0)
 
+write.csv(betas.0, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv", row.names = FALSE)
+
 ggplot(betas) +
   geom_density(aes(x=value, colour=season)) +
   geom_density(data=betas.0, aes(x=value, fill=season, colour=season), alpha=0.5) +
@@ -259,58 +279,71 @@ ggplot(betas) +
 
 ggsave(filename="Figures/Betas.jpeg", width=14, height=8)
 
-ggplot(betas.0 %>% 
-         dplyr::filter(cov %in% c("evi", "crop", "tree", "water"))) +
-  geom_density(aes(x=value, colour=season)) +
-  geom_vline(aes(xintercept=0)) +
-  facet_grid(scale ~ cov, scales="free")
-
-ggsave(filename="Figures/Betas_sig.jpeg", width=12, height=8)
-
 ggplot(betas %>% 
          dplyr::filter(cov %in% c("water"))) +
   geom_density(aes(x=value, colour=season)) +
   geom_vline(aes(xintercept=0)) +
   facet_grid(scale ~ season, scales="free")
 
-
-
-#14. Sum of selection strength----
-betas.sum <- betas.0 %>% 
-  dplyr::select(scale, season, value, upper, lower) %>% 
-  unique() %>% 
-  group_by(scale, season) %>% 
-  summarize(mean = mean(abs(mean)),
-            upper = mean(abs(upper)),
-            lower = mean(abs(lower))) %>% 
-  ungroup()
-
-ggplot(betas.sum) +
-  geom_point(aes(x=season, y=mean, colour=scale), size=3) +
-  geom_point(aes(x=season, y=upper, colour=scale), size=2, alpha = 0.5) +
-  geom_point(aes(x=season, y=lower, colour=scale), size=2, alpha = 0.5) +
-  facet_wrap(~scale)
-
-#15. Test of selection strength----
-
-
-#14. Individuals that don't converge----
+#15. Looking for nonconvergence----
 summary.rhat <- summary %>% 
   dplyr::filter(Rhat > 1.1)
 
+#Check for betas that didn't converge
+summary.rhat.beta <- summary.rhat %>% 
+  dplyr::filter(str_sub(val, 1, 4)=="beta")
+
 table(summary.rhat$season, summary.rhat$scale)  
 
-#Ok deal with the one fall migration point
-summary.id <- summary.rhat %>% 
-  dplyr::filter(season=="FallMig")
-#215,13
-dat.id <- dat %>% 
-  dplyr::filter(Season=="FallMig",
-                scale=="land")
+#16. Prior predictive check----
 
-ptID.id <- data.frame(ptID = unique(dat.i$ptID)) %>% 
-  mutate(n = row_number())
+sink("Mixed model prior check.txt")
+cat("model{    
+  
+#Priors
+mu.beta ~ dnorm(0, 0.01)
+#sigma.beta ~ dexp(1)
+#tau.beta <- 1/(sigma.beta^2)
+tau.beta ~ dgamma(0.1, 0.01)
+sigma.beta <- 1/sqrt(tau.beta)
 
-dat.id.n <- ptID.id %>% 
-  dplyr::filter(n==215) %>% 
-  left_join(dat.id)
+
+for(b in 1:nbirds){    
+beta[b] ~ dnorm(mu.beta, tau.beta)    
+}    
+
+#Likelihood   
+    for(i in 1:nsets){    
+    y[i,1:nchoices[i]] ~ dmulti(p[i,1:nchoices[i]],1)    
+    
+    for(j in 1:nchoices[i]){    
+    log(phi[i,j]) <- beta[bird[i]]*X1[i,j]
+    
+    p[i,j] <- phi[i,j]/(sum(phi[i,1:nchoices[i]]))    
+    
+    D1[i,j] <- pow(y[i,j] - p[i,j], 2)    
+    }    
+    
+    D2[i] <- sum(D1[i,1:nchoices[i]])    
+    }    
+    
+    fit.data <- sum(D2[1:nsets])    
+    }",fill = TRUE)
+
+sink()
+
+win.data.check = list(nsets=nsets, nchoices=nchoices, bird=bird, X1=X1, X2=X2, X3=X3, X4=X4, nbirds=nbirds)
+
+params.check = c("mu.beta", "sigma.beta")
+
+outMcheck = jags(win.data.check, inits, params.check, "Mixed model prior check.txt", n.chains=nc, n.thin=nt, n.iter=200000, n.burnin=nb, parallel=T, n.adapt = 1000)
+
+jagsUI::traceplot(outMcheck)
+jagsUI::densityplot(outMcheck)
+
+#17. BPV----
+fit.sum <- fit %>% 
+  group_by(scale, season) %>% 
+  summarize(p = mean(p)) %>% 
+  ungroup()
+fit.sum
