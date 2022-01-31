@@ -61,7 +61,7 @@ betas.list <- list()
 fit.list <- list()
 
 #for(i in 1:nrow(loop)){
-for(i in c(3:3)){  
+for(i in c(5:5)){  
   
   #3. Subset data----
   scale.i <- loop$scale[i]
@@ -103,19 +103,23 @@ for(i in c(3:3)){
   
 #Priors
 mu.beta1 ~ dnorm(0, 0.01)
-tau.beta1 ~ dgamma(0.1, 1)
+tau.beta1 ~ dexp(10)
+#tau.beta1 ~ dgamma(10, 0.001)
 sigma.beta1 <- 1/sqrt(tau.beta1)
 
 mu.beta2 ~ dnorm(0, 0.01)
-tau.beta2 ~ dgamma(0.1, 1)
+tau.beta2 ~ dexp(10)
+#tau.beta2 ~ dgamma(10, 0.001)
 sigma.beta2 <- 1/sqrt(tau.beta2)
 
 mu.beta3 ~ dnorm(0, 0.01)
-tau.beta3 ~ dgamma(0.1, 1)
+tau.beta3 ~ dexp(10)
+#tau.beta3 ~ dgamma(10, 0.001)
 sigma.beta3 <- 1/sqrt(tau.beta3)
 
 mu.beta4 ~ dnorm(0, 0.01)
-tau.beta4 ~ dgamma(0.1, 1)
+tau.beta4 ~ dexp(10)
+#tau.beta4 ~ dgamma(10, 0.001)
 sigma.beta4 <- 1/sqrt(tau.beta4)  
 
 for(b in 1:nbirds){    
@@ -131,7 +135,8 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
     ysim[i,1:nchoices[i]] ~ dmulti(p[i,1:nchoices[i]],1)    
     
     for(j in 1:nchoices[i]){    
-    log(phi[i,j]) <- beta1[bird[i]]*X1[i,j] + beta2[bird[i]]*X2[i,j]+ beta3[bird[i]]*X3[i,j]+ beta4[bird[i]]*X4[i,j]
+    log(phi[i,j]) <- beta1[bird[i]]*X1[i,j] + beta2[bird[i]]*X2[i,j]+ beta3[bird[i]]*X3[i,j] + beta4[bird[i]]*X4[i,j] 
+#    log(phi[i,j]) <- beta1[bird[i]]*1 + beta2[bird[i]]*1+ beta3[bird[i]]*1 + beta4[bird[i]]*1 
     
     p[i,j] <- phi[i,j]/(sum(phi[i,1:nchoices[i]]))    
     
@@ -200,18 +205,17 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
   print(paste0("Finished model ", i, " of ", nrow(loop), " models in ", outM$mcmc.info$elapsed.mins, " minutes"))
   
 }
-
 #10. Collapse outputs----
 model <- rbindlist(model.list)
 summary <- rbindlist(summary.list)
 betas <- rbindlist(betas.list, fill=TRUE) %>% 
   pivot_longer(beta1:beta4, names_to="beta", values_to="value") 
 fit <- rbindlist(fit.list) %>% 
-  mutate(p = ifelse(bpv>1, 1, 0))
+  mutate(p = ifelse(bpv>=0, 1, 0))
 
 #11. Save workspace----
 #save.image("CONIRoosting_WorkSpace.Rdata")
-load("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/CONIRoosting_WorkSpace.Rdata")
+#load("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/CONIRoosting_WorkSpace.Rdata")
 
 #12. Save out traceplots----
 for(i in 1:nrow(loop)){
@@ -226,11 +230,11 @@ for(i in 1:nrow(loop)){
   jagsUI::densityplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4"))
   dev.off()
   
-  jpeg(paste0("Figures/Traceplots/Traceplot_sd_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
+  jpeg(paste0("Figures/Traceplots/Traceplot_sigma_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
   jagsUI::traceplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4"))
   dev.off()
   
-  jpeg(paste0("Figures/Traceplots/Densityplot_sd_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
+  jpeg(paste0("Figures/Traceplots/Densityplot_sigma_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
   jagsUI::densityplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4"))
   dev.off()
   
@@ -273,7 +277,7 @@ write.csv(betas.0, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analy
 
 ggplot(betas) +
   geom_density(aes(x=value, colour=season)) +
-  geom_density(data=betas.0, aes(x=value, fill=season, colour=season), alpha=0.5) +
+  geom_density(data=betas.0, aes(x=value, fill=season, colour=season), alpha=0.5, show.legend = FALSE) +
   geom_vline(aes(xintercept=0)) +
   facet_grid(scale ~ cov, scales="free")
 
@@ -301,10 +305,8 @@ sink("Mixed model prior check.txt")
 cat("model{    
   
 #Priors
-mu.beta ~ dnorm(0, 0.01)
-#sigma.beta ~ dexp(1)
-#tau.beta <- 1/(sigma.beta^2)
-tau.beta ~ dgamma(0.1, 0.01)
+mu.beta ~ dnorm(0, 0.001)
+tau.beta ~ dexp(01)
 sigma.beta <- 1/sqrt(tau.beta)
 
 
@@ -332,7 +334,7 @@ beta[b] ~ dnorm(mu.beta, tau.beta)
 
 sink()
 
-win.data.check = list(nsets=nsets, nchoices=nchoices, bird=bird, X1=X1, X2=X2, X3=X3, X4=X4, nbirds=nbirds)
+win.data.check = list(nsets=nsets, nchoices=nchoices, bird=bird, X1=X1, nbirds=nbirds)
 
 params.check = c("mu.beta", "sigma.beta")
 
@@ -344,6 +346,7 @@ jagsUI::densityplot(outMcheck)
 #17. BPV----
 fit.sum <- fit %>% 
   group_by(scale, season) %>% 
-  summarize(p = mean(p)) %>% 
+  summarize(p = mean(p),
+            bpv = mean(bpv)) %>% 
   ungroup()
-fit.sum
+View(fit.sum)
