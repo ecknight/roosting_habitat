@@ -13,7 +13,12 @@ ee_Initialize()
 ee_check()
 
 #2. Settings----
+
+#Number of samples
 n <- 25
+
+#Distance kernel
+kern <- ee$Kernel$euclidean(radius=10000, units="meters")
 
 #2. Write functions----
 #2a. Function to add property with time in milliseconds
@@ -56,6 +61,7 @@ for(i in 1:length(years)){
   
   data.i <- trackingdata %>% 
     dplyr::filter(year==year.i) %>% 
+    arrange(X, Y) %>% 
     mutate(row = row_number(),
            n = ceiling(row/1000))
   
@@ -119,10 +125,52 @@ for(i in 1:length(years)){
       sf = FALSE
     )
     
-    #16. Put two data sources together----
-    data.cov <- full_join(data.piv, data.lc)
+    #16. Select only the discrete classification band----
+    lcdc <- lc$select('discrete_classification')
+    
+    #17. Create raster of distance to open water----
+    water <- lcdc$mask(lcdc$eq(80))
+    openwaterdist <- water$distance(kern, skipMasked=FALSE)$rename("openwaterdist")
+    
+    #18. Get point value of distance to open water----
+    data.openwater <- ee_extract(
+      x = openwaterdist,
+      y = datasf,
+      scale = 100,
+      sf = FALSE
+    )
+    
+    #19. Create raster of distance to wetland----
+    wetland <- lcdc$mask(lcdc$eq(90))
+    wetlanddist <- wetland$distance(kern, skipMasked=FALSE)$rename("wetlanddist")
+    
+    #20. Get point value of distance to open water----
+    data.wetland <- ee_extract(
+      x = wetlanddist,
+      y = datasf,
+      scale = 100,
+      sf = FALSE
+    )
+    
+    #21. Create raster of distance to crop----
+    crop <- lcdc$mask(lcdc$eq(40))
+    cropdist <- crop$distance(kern, skipMasked=FALSE)$rename("cropdist")
+    
+    #22. Get point value of distance to open water----
+    data.crop <- ee_extract(
+      x = cropdist,
+      y = datasf,
+      scale = 100,
+      sf = FALSE
+    )
+  
+    #23. Put all data sources together----
+    data.cov <- full_join(data.piv, data.lc) %>% 
+      full_join(data.openwater) %>% 
+      full_join(data.wetland) %>% 
+      full_join(data.crop)
 
-    #17. Save to list----
+    #24. Save to list----
     data.year[[j]] <- data.cov
     
     end_time <- Sys.time()
