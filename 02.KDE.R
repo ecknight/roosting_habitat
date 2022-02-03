@@ -11,8 +11,6 @@ library(lme4)
 
 options(scipen = 999)
 
-#TO DO: UPDATE EXAMPLES WITH CTMM####
-
 #1. Read in data----
 ids.exclude <- read.csv("Data/ExclusionYearForBirdsWith2BreedingYears.csv") 
 
@@ -64,6 +62,8 @@ dat.kde.m <- dat.kde %>%
          location.long=Long,
          timestamp=DateTime) 
 
+write.csv(dat.kde.m, "KDEData.csv", row.names = FALSE)
+
 
 #6. Format for ctmm----
 datt <- as.telemetry(dat.kde.m, timezone="UTC")
@@ -83,7 +83,7 @@ for(i in 1:length(ids)){
 }
 
 #7b. Pooled----
-#Not sure these make sense because of the sampling schedules
+#Not sure these make sense because of the variation in sampling schedules
 #Breeding
 datt.breed <- as.telemetry(dat.kde.m %>% dplyr::filter(Season=="Breed"))
 SVF.breed <- lapply(datt.breed, variogram) %>% 
@@ -143,7 +143,7 @@ m.area.stat <- m.area.clean %>%
   dplyr::filter(Season %in% c("Breed", "Winter"))
 
 lm.stat <- lmer(est.km ~ Season*n + (1|PinpointID), data=m.area.stat, na.action="na.fail", REML=FALSE)
-dredge(lm.stat, rank="AIC")
+dredge(lm.stat, rank="AICc")
 lm.stat.use <- lmer(est.km ~ Season + (1|PinpointID), data=m.area.stat, na.action="na.fail")
 summary(lm.stat.use)
 
@@ -152,12 +152,12 @@ m.area.mig <- m.area.clean %>%
   dplyr::filter(!Season %in% c("Breed", "Winter"))
 
 lm.mig <- lm(est.km ~ Season*n, data=m.area.mig, na.action="na.fail")
-dredge(lm.mig, rank="AIC")
+dredge(lm.mig, rank="AICc")
 
 #11. Final summary----
 m.area.sum <- m.area.clean %>% 
-  mutate(Season = ifelse(Season %in% c("FallMig", "SpringMig"), "Migration", Season)) %>% 
-  group_by(Season) %>% 
+  mutate(Season2 = ifelse(Season %in% c("FallMig", "SpringMig"), "Migration", Season)) %>% 
+  group_by(Season2) %>% 
   summarize(area.mean = mean(est.km),
             area.sd = sd(est.km),
             n = n()) %>% 
@@ -168,42 +168,35 @@ m.area.sum
 write.csv(m.area.sum, "KDEAreaMean.csv", row.names = FALSE)
 
 #12. Save out examples for Figure 2----
-dat.kde.i <- dat.kde %>% 
-  dplyr::filter(ID %in% c("826-Winter-1", "483-Breed-0")) %>% 
-  dplyr::select(ID, Lat, Long) %>% 
-  rbind(dat.mig %>% 
-          dplyr::filter(ID=="2217-SpringMig-9") %>% 
-          dplyr::select(ID, Lat, Long))
+dat.kde.i <- dat.kde.m %>% 
+  dplyr::filter(tag.local.identifier %in% c("826-Winter-1", "483-Breed-0", "2217-FallMig-7"))
 
-dat.kde.m <- dat.kde.i %>% 
-  st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
-  st_transform(crs=3857) %>% 
-  st_coordinates()
+datt.i <- as.telemetry(dat.kde.i, timezone="UTC")
 
-dat.kde.sp <- SpatialPointsDataFrame(coords=dat.kde.m, 
-                                     data=data.frame(dat.kde.i$ID),
-                                     proj4string = CRS("+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +a=6378137 +b=6378137 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs "))
+ids.i <- unique(dat.kde.i$tag.local.identifier)
+m.sum <- data.frame()
+for(i in 1:length(ids)){
+  m.guess <- ctmm.guess(datt.i[[ids.i[i]]], interactive=FALSE)
+  m.fits <- ctmm.select(datt.i[[ids.i[i]]], m.guess, verbose=TRUE, cores=2)
+  m.sum <- data.frame(dAIC=summary(m.fits)[,1]) %>% 
+    mutate(mod = row.names(data.frame(summary(m.fits))),
+           ID=ids.i[i])  %>% 
+    rbind(m.sum)
+  m.use <- ctmm.fit(datt.i[[ids.i[i]]], m.fits[[1]])
+  m.akde <- akde(datt.i[[ids.i[i]]],m.use)
+  if(i==1){
+    shps.i <- ctmm::as.sf(m.akde, level.UD=c(0.05, 0.25, 0.5, 0.75, 0.96))
+  }
+  else{
+    shps.i <- ctmm::as.sf(m.akde, level.UD=c(0.05, 0.25, 0.5, 0.75, 0.96)) %>% 
+      rbind(shps.i)
+  }
 
-kd <- kernelUD(dat.kde.sp, grid = 1000, extent=2, h="href", same4all=FALSE)
+}
 
-kd.shp.95 <- getverticeshr(kd, 95) %>% 
-  st_as_sf() %>% 
-  mutate(iso=95)
-kd.shp.75 <- getverticeshr(kd, 75) %>% 
-  st_as_sf() %>% 
-  mutate(iso=75)
-kd.shp.50 <- getverticeshr(kd, 50) %>% 
-  st_as_sf() %>% 
-  mutate(iso=50)
-kd.shp.25 <- getverticeshr(kd, 25) %>% 
-  st_as_sf() %>% 
-  mutate(iso=25)
-kd.shp.05 <- getverticeshr(kd, 5) %>% 
-  st_as_sf() %>% 
-  mutate(iso=5)
-
-kd.shp <- rbind(kd.shp.95, kd.shp.75, kd.shp.50, kd.shp.25, kd.shp.05) %>% 
+shps <- shps.i %>% 
+  separate(name, into=c("id", "iso", "ci"), sep=" ") %>% 
   separate(id, into=c("PinpointID", "Season", "id"), remove=FALSE) 
 
-write_sf(kd.shp, "Shapefiles/ExampleKDE.shp")
+write_sf(shps, "Shapefiles/ExampleKDE.shp")
 write.csv(dat.kde.i, "Shapefiles/ExampleKDEData.csv", row.names = FALSE)
