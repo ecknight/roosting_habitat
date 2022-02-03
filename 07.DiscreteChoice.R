@@ -29,19 +29,29 @@ ggplot(dat, aes(x=tree, y=used, colour=scale)) +
   geom_smooth() +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=water, y=used, colour=Season)) + 
-  geom_point() +
-  geom_smooth() +
-  facet_grid(Season~scale, scales="free")
+ggplot(dat, aes(x=waterdist, y=used, colour=scale)) + 
+#  geom_point() +
+  geom_smooth(method="lm") +
+  facet_wrap(~Season, scales="free")
+
+ggplot(dat, aes(x=water, y=used, colour=scale)) + 
+  #  geom_point() +
+  geom_smooth(method="lm") +
+  facet_wrap(~Season, scales="free")
+
+ggplot(dat, aes(x=cropdist, y=used, colour=scale)) + 
+  #  geom_point() +
+  geom_smooth(method="lm") +
+  facet_wrap(~Season, scales="free")
 
 ggplot(dat, aes(x=crops, y=used, colour=scale)) + 
   #  geom_point() +
-  geom_smooth() +
+  geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
 ggplot(dat, aes(x=evi, y=used, colour=scale)) + 
   #  geom_point() +
-  geom_smooth() +
+  geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
 ggplot(dat %>% dplyr::filter(Season=="Winter", scale=="pt", water > 0)) +
@@ -60,8 +70,8 @@ summary.list <- list()
 betas.list <- list()
 fit.list <- list()
 
-#for(i in 1:nrow(loop)){
-for(i in c(5:5)){  
+for(i in 1:nrow(loop)){
+#for(i in c(5:5)){  
   
   #3. Subset data----
   scale.i <- loop$scale[i]
@@ -91,8 +101,8 @@ for(i in c(5:5)){
   #a matrix with the same dimensions as y that specifies the first explanatory variable for each set-by-choice combination
   X1 <- matrix(dat.i$evi.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
   X2 <- matrix(dat.i$tree.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X3 <- matrix(dat.i$crops.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X4 <- matrix(dat.i$water.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X3 <- matrix(dat.i$cropdist.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X4 <- matrix(dat.i$waterdist.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
 
   #max value in the bird vector above (i.e., an integer representing how many unique birds there are)
   nbirds <- max(bird)
@@ -104,22 +114,18 @@ for(i in c(5:5)){
 #Priors
 mu.beta1 ~ dnorm(0, 0.01)
 tau.beta1 ~ dexp(10)
-#tau.beta1 ~ dgamma(10, 0.001)
 sigma.beta1 <- 1/sqrt(tau.beta1)
 
 mu.beta2 ~ dnorm(0, 0.01)
 tau.beta2 ~ dexp(10)
-#tau.beta2 ~ dgamma(10, 0.001)
 sigma.beta2 <- 1/sqrt(tau.beta2)
 
 mu.beta3 ~ dnorm(0, 0.01)
 tau.beta3 ~ dexp(10)
-#tau.beta3 ~ dgamma(10, 0.001)
 sigma.beta3 <- 1/sqrt(tau.beta3)
 
 mu.beta4 ~ dnorm(0, 0.01)
 tau.beta4 ~ dexp(10)
-#tau.beta4 ~ dgamma(10, 0.001)
 sigma.beta4 <- 1/sqrt(tau.beta4)  
 
 for(b in 1:nbirds){    
@@ -170,7 +176,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
              "p", "fit.data", "fit.sim", "bpv")
 
   #Number of chains, iterations, burnin, and thinning 
-  nc=3; ni=200000; nb=100000; nt=50; na=1000 
+  nc=3; ni=500000; nb=100000; nt=50; na=1000 
   
   #7. Run JAGS----
   outM = jags(win.data, inits, params, "Mixed model.txt", n.chains=nc, n.thin=nt, n.iter=ni, n.burnin=nb, parallel=T, n.adapt = 1000)
@@ -205,6 +211,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
   print(paste0("Finished model ", i, " of ", nrow(loop), " models in ", outM$mcmc.info$elapsed.mins, " minutes"))
   
 }
+
 #10. Collapse outputs----
 model <- rbindlist(model.list)
 summary <- rbindlist(summary.list)
@@ -299,6 +306,14 @@ summary.rhat.beta <- summary.rhat %>%
 
 table(summary.rhat$season, summary.rhat$scale)  
 
+#16. Model fit----
+fit.sum <- fit %>% 
+  group_by(scale, season) %>% 
+  summarize(p = mean(p),
+            bpv = mean(bpv)) %>% 
+  ungroup()
+View(fit.sum)
+
 #16. Prior predictive check----
 
 sink("Mixed model prior check.txt")
@@ -343,10 +358,4 @@ outMcheck = jags(win.data.check, inits, params.check, "Mixed model prior check.t
 jagsUI::traceplot(outMcheck)
 jagsUI::densityplot(outMcheck)
 
-#17. BPV----
-fit.sum <- fit %>% 
-  group_by(scale, season) %>% 
-  summarize(p = mean(p),
-            bpv = mean(bpv)) %>% 
-  ungroup()
-View(fit.sum)
+
