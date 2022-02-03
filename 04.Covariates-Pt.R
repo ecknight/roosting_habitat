@@ -18,7 +18,7 @@ ee_check()
 n <- 25
 
 #Distance kernel
-kern <- ee$Kernel$euclidean(radius=10000, units="meters")
+kern <- ee$Kernel$euclidean(radius=20000, units="meters")
 
 #2. Write functions----
 #2a. Function to add property with time in milliseconds
@@ -183,7 +183,7 @@ for(i in 1:length(years)){
   
 }
 
-#18. Convert to dataframe & save----
+#25. Convert to dataframe & save----
 data.all <- rbindlist(data.out, fill=TRUE) %>% 
   mutate(doy = yday(ymd_hms(timestamp))) %>% 
   right_join(trackingdata) %>% 
@@ -191,13 +191,15 @@ data.all <- rbindlist(data.out, fill=TRUE) %>%
 
 write.csv(data.all, "Data/Covariates_pt_raw.csv")
 
+data.all <- read.csv("Data/Covariates_pt_raw.csv")
+
 data.n <- table(data.all$ptIDn) %>% 
   data.frame() %>% 
   rename(ptIDn = Var1) %>% 
   dplyr::filter(Freq > 1) %>% 
   left_join(data.all)
 
-#19. Read in tracking data for season info----
+#26. Read in tracking data for season info----
 dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
   dplyr::filter(Type != "Band") %>% 
   group_by(PinpointID) %>% 
@@ -207,19 +209,23 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
   arrange(ptID) %>% 
   dplyr::select(ptID, Year, Season, Winter)
 
-#20. Put everything together, filter out winter migration points----
+#27. Put everything together, filter out winter migration points----
 data.covs <- data.all %>% 
   rename_with(~gsub(pattern=".coverfraction", replacement="", .x)) %>% 
-  rename_with(~gsub(pattern="water.", replacement="", .x)) %>% 
-  mutate(water = permanent + seasonal) %>% 
+  mutate(water = water.permanent + water.seasonal,
+         openwaterdist = ifelse(is.na(openwaterdist), 30000, openwaterdist),
+         wetlanddist = ifelse(is.na(wetlanddist), 30000, wetlanddist),
+         cropdist = ifelse(is.na(cropdist), 30000, cropdist),
+         waterdist1 = ifelse(openwaterdist<wetlanddist, 1, 0),
+         waterdist = ifelse(waterdist1==1, openwaterdist, wetlanddist)) %>% 
   left_join(dat.hab) %>% 
   separate(ptID, into=c("pinpointID", "n"), remove=FALSE) %>% 
-dplyr::select(pinpointID, ptID, Radius, Type, timestamp, Season, Winter, X, Y, datediff, EVI, bare, crops, grass, moss, shrub, tree, water) %>% 
+dplyr::select(pinpointID, ptID, Radius, Type, timestamp, Season, Winter, X, Y, datediff, EVI, bare, crops, grass, moss, shrub, tree, water, waterdist, cropdist) %>% 
   dplyr::filter(!is.na(tree),
                 !is.na(EVI),
                 !Season=="WinterMig")
 
-#21. Take out points with less than 20 available points with covs----
+#28. Take out points with less than n available points with covs----
 pt.n.0 <- table(data.covs$ptID, data.covs$Type) %>% 
   data.frame() %>% 
   rename(ptID=Var1, Type=Var2) %>% 
@@ -237,7 +243,7 @@ data.n <- data.covs %>%
   dplyr::filter(!ptID %in% pt.n.0$ptID,
                 !ptID %in% pt.n.1$ptID)
 
-#22. Randomly sample to 25 available points per point----
+#29. Randomly sample to n available points per point----
 set.seed(1234)
 data.sub <- data.n %>% 
   dplyr::filter(Type=="Used") %>% 
@@ -248,7 +254,7 @@ data.sub <- data.n %>%
           ungroup()) %>% 
   mutate(used = ifelse(Type=="Used", 1, 0))
 
-#23. Split into seasons, add BirdID field----
+#30. Split into seasons, add BirdID field----
 season <- unique(data.sub$Season)
 
 data.season <- data.frame()
@@ -268,26 +274,28 @@ for(i in 1:length(season)){
            bare.s = scale(bare),
            crops.s = scale(crops),
            water.s = scale(water),
+           waterdist.s = scale(waterdist),
+           cropdist.s = scale(cropdist),
            evi.s = scale(EVI))
   
   data.season <- rbind(data.season, data.season.i)
   
 }
 
-#24. Write to csv----
+#31. Write to csv----
 write.csv(data.season, "Data/Covariates_pt.csv", row.names=FALSE)
 
-#25. VIF----
+#32. VIF----
 data.season <- read.csv("Data/Covariates_pt.csv")
 
 data.vif <- data.season %>% 
-  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s)
+  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s)
 cor(data.vif)
 #grass and tree
 vif(data.vif)
 
 data.vif <- data.season %>% 
-  dplyr::select(tree.s, shrub.s, bare.s, crops.s, water.s, evi.s)
+  dplyr::select(tree.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s)
 cor(data.vif)
 #grass and tree
 vif(data.vif)
