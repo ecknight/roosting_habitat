@@ -12,7 +12,7 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
   mutate(ptID = paste0(PinpointID,"-", row)) %>% 
   arrange(ptID)
 
-#2. Point level: Random points within 200 m----
+#2. Point level: Random points within 300 m----
 n.pt <- 30
 
 buff.pt <- dat.hab %>% 
@@ -67,7 +67,7 @@ buff.hr.breed <- dat.hab %>%
   dplyr::filter(Season=="Breed") %>% 
   st_as_sf(coords=c("Long", "Lat"), crs=4326) %>% 
   st_transform(crs=3857) %>% 
-  st_buffer(dist=7000) %>% 
+  st_buffer(dist=5000) %>% 
   arrange(PinpointID)
 
 buff.hr.winter <- dat.hab %>% 
