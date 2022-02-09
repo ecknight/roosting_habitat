@@ -18,6 +18,7 @@ library(ggmap)
 library(ggforce)
 library(gridExtra)
 library(grid)
+library(ggridges)
 
 
 my.theme <- theme_classic() +
@@ -123,8 +124,9 @@ studyarea <- ggplot() +
   geom_polygon(data=whemi, aes(x=long, y=lat, group=group), fill="gray70", colour = "gray85", size=0.3) +
   geom_path(data=dat, aes(x=Long, y=Lat, group=PinpointID), colour="black", size=0.3) +
   geom_point(data=dat, aes(x=Long, y=Lat, fill=Season), pch=21, colour="black", alpha=0.7) +
-  geom_point(data=pt.breed, aes(x=Long, y=Lat), fill="yellow", colour="black", pch=21, size=4,  alpha=0.7) +
+  geom_point(data=pt.breed, aes(x=Long, y=Lat), fill="gold1", colour="black", pch=21, size=4,  alpha=0.7) +
   geom_text(data=pt.breed, aes(x=Long, y=Lat, label=n), nudge_y=0, nudge_x=0, size=2.5) +
+  scale_fill_manual(values=c("coral2", "chartreuse3", "steelblue3"))+
   xlab("") +
   ylab("") +
   xlim(c(-169, -30)) +
@@ -149,29 +151,30 @@ dat.area.all <- read.csv("KDEArea.csv") %>%
 
 plot.hist.breed <- ggplot(dat.area.all %>% 
                             dplyr::filter(Season=="Breeding")) +
-  geom_histogram(aes(x=est.km)) +
+  geom_histogram(aes(x=est.km), bins=10) +
   ylab("Breeding") +
   my.theme +
   theme(axis.text.x = element_text(size=14),
         axis.text.y = element_text(size=14),
         axis.title.x = element_blank(),
-        axis.title.y = element_text(size=20))
-#plot.hist.breed
+        axis.title.y = element_text(size=20)) +
+  geom_text(aes(label="A)", x=1, y=3.7), size=14)
+plot.hist.breed
 
 plot.hist.winter <- ggplot(dat.area.all %>% 
                             dplyr::filter(Season=="Winter")) +
-  geom_histogram(aes(x=est.km)) +
+  geom_histogram(aes(x=est.km), bins=10) +
   ylab("Wintering") +
   my.theme +
   theme(axis.text.x = element_text(size=14),
         axis.text.y = element_text(size=14),
         axis.title.x = element_blank(),
         axis.title.y = element_text(size=20))
-#plot.hist.winter
+plot.hist.winter
 
 plot.hist.mig <- ggplot(dat.area.all %>% 
                              dplyr::filter(Season=="Migration")) +
-  geom_histogram(aes(x=est.km)) +
+  geom_histogram(aes(x=est.km), bins=10) +
   scale_y_continuous(breaks=c(0,1,2)) +
   ylab("Migration") +
   my.theme +
@@ -179,7 +182,7 @@ plot.hist.mig <- ggplot(dat.area.all %>%
         axis.text.y = element_text(size=14),
         axis.title.x = element_blank(),
         axis.title.y = element_text(size=20))
-#plot.hist.mig
+plot.hist.mig
 
 #Put together
 plot.hist <- grid.arrange(plot.hist.breed, plot.hist.winter, plot.hist.mig,
@@ -260,7 +263,8 @@ plot.kde.breed <- ggmap(map.breed) +
                  st.dist = 0.05,
                  st.color="white",
                  data=breed.shp,
-                 anchor = c(x=center.breed.shp$X-width.breed$max*0.5, y=center.breed.shp$Y-width.breed$max*0.5))
+                 anchor = c(x=center.breed.shp$X-width.breed$max*0.5, y=center.breed.shp$Y-width.breed$max*0.5)) +
+  geom_text(aes(label="B)", x=center.breed.shp$X-width.breed$max*0.5, y=center.breed.shp$Y+width.breed$max*0.5), size=16, colour="white")
 #plot.kde.breed
 
 #2bii. Winter----
@@ -400,8 +404,6 @@ plot.kde <- grid.arrange(plot.kde.breed, plot.kde.winter, plot.kde.mig,
                                                c(4),
                                                c(5)))
 
-ggsave(plot.kde, filename="Figures/KDEtest.jpeg", height = 16, width = 6)
-
 #2c. Choice set design----
 dat.pt <- read.csv("Data/Covariates_pt.csv") %>% 
   rename(PinpointID = pinpointID)
@@ -499,9 +501,8 @@ plot.choice.breed <- ggplot() +
                  st.dist = 0.05,
                  st.color="black",
                  data=breed.shp,
-                 anchor = c(x=center.breed.shp$X-width.breed$max*0.45, y=center.breed.shp$Y-width.breed$max*0.45))
-
-ggsave(plot.choice.breed, filename="Figures/KDEtest3breed.jpeg", height = 8, width = 8)
+                 anchor = c(x=center.breed.shp$X-width.breed$max*0.45, y=center.breed.shp$Y-width.breed$max*0.45)) +
+  geom_text(aes(label="C)", x=center.breed.shp$X-width.breed$max*0.45, y=center.breed.shp$Y+width.breed$max*0.45), size=16, colour="black")
 
 #2cii. Winter----
 #Select one used point
@@ -596,9 +597,6 @@ plot.choice.winter <- ggplot() +
                  st.color="black",
                  data=winter.shp,
                  anchor = c(x=center.winter.shp$X-width.winter$max*0.78, y=center.winter.shp$Y-width.winter$max*0.78))
-plot.choice.winter
-
-ggsave(plot.choice.winter, filename="Figures/KDEtest3winter.jpeg", height = 8, width = 8)
 
 #2ciii. Migration----
 set.seed(1234)
@@ -662,7 +660,6 @@ lc.r <- raster("Shapefiles/Fig2_lc_migration.tif") %>%
   raster::aggregate(10) %>% 
   projectRaster(crs=3857)
 
-plot(lc.r)
 lc.df.mig <- lc.r %>% 
   rasterToPoints() %>% 
   data.frame()
@@ -693,13 +690,12 @@ plot.choice.mig <- ggplot() +
                  st.color="black",
                  data=mig.shp,
                  anchor = c(x=center.mig.shp$X-width.mig$max*0.46, y=center.mig.shp$Y-width.mig$max*0.46))
-plot.choice.mig
 
 #2div. Availability domain legend----
 plot.avail.legend <- ggplot() +
   coord_sf(crs = st_crs(3857)) +
   geom_sf(data = buff.breed.hr, aes(colour=id), fill=NA,  size = 1.5, inherit.aes=FALSE) +
-  scale_colour_manual(values=c("black"), label="Availability\ndomain", name="")  +
+  scale_colour_manual(values=c("black"), label="Availability domain", name="")  +
   theme(legend.position="bottom",
         legend.text = element_text(size=14))
 plot.avail.legend
@@ -709,55 +705,48 @@ avail.legend <- get_legend(plot.avail.legend)
 plot.usepts.legend <- ggplot() +
   coord_sf(crs = st_crs(3857)) +
   geom_point(data=pts.breed.hr, aes(X, Y, fill=factor(used)), pch=21, colour="black", size=4, alpha=0.7) +
-  scale_fill_manual(values=c("white", "black"), name="", labels=c("Available", "Used"))  +
+  scale_fill_manual(values=c("white", "black"), name="300 m buffer", labels=c("Available", "Used"))  +
   theme(legend.position="bottom",
-        legend.text = element_text(size=14))
+        legend.text = element_text(size=14),
+        legend.title = element_text(size=14))
 plot.usepts.legend
 usepts.legend <- get_legend(plot.usepts.legend)
 
 #2cvi. Put together----
 plot.choice <- grid.arrange(plot.choice.breed, plot.choice.winter, plot.choice.mig,
-                            avail.legend, usepts.legend,
+                            usepts.legend, avail.legend, 
                             ncol=2, nrow=5,
                             widths=c(0.4, 0.6),
                             heights=c(1,1,1,0.1, 0.1),
                             layout_matrix = rbind(c(1,1),
                                                   c(2,2),
                                                   c(3,3),
-                                                  c(4,5),
-                                                  c(NA, NA)))
+                                                  c(4,4),
+                                                  c(5, 5)))
 
 #2d. Put it all together----
 plot.area <- ggsave(grid.arrange(plot.hist, plot.kde, plot.choice,
                                  ncol=3, nrow=1),
-                    filename="Figures/KDEtest2.jpeg", height = 14, width = 15)
+                    filename="Figures/KDE.jpeg", height = 14, width = 15)
 
-
-
-plot.area <- ggsave(grid.arrange(plot.hist, plot.kde, plot.choice,
-                                 kde.legend, pt.legend,
-                                 avail.legend, usepts.legend,
-                                 ncol=9, nrow=2,
-                                 widths = c(1,1,1,1,1,1,1,1,1),
-                                 heights = c(6,0.2),
-                                 layout_matrix = rbind(c(1,1,1,2,2,2,3,3,3),
-                                                       c(NA,NA,NA,4,4,4,5,6,7))),
-                    filename="Figures/KDEtest2.jpeg", height = 14, width = 14)
 
 #3. Figure 3 - Selection betas-----
-betas <- read.csv("Betas.csv")
-betas.0 <- betas %>% 
-  dplyr::filter()
+betas <- read.csv("betas.csv")
 
-ggplot(betas) +
-  geom_density(aes(x=value, colour=season)) +
-  geom_density(data=betas.0, aes(x=value, fill=season, colour=season), alpha=0.5) +
-  geom_vline(aes(xintercept=0)) +
+betas$cov <- factor(betas$cov, levels=c("tree", "evi", "crop", "water"), labels=c("Forest cover", "EVI", "Distance to crop", "Distance to water"))
+betas$scale <- factor(betas$scale, levels=c("pt", "hr"), labels=c("Roost site", "Home range"))
+betas$season <- factor(betas$season, levels=c("SpringMig", "Winter", "FallMig", "Breed"), labels=c("Spring migration", "Winter", "Fall migration", "Breeding"))
+
+plot.betas <- ggplot(betas) +
+  geom_density_ridges(aes(x=value, y=season, fill=season), show.legend = FALSE, colour="grey30", alpha=0.9) +
+  geom_vline(aes(xintercept=0), linetype="dashed") +
   facet_grid(scale ~ cov, scales="free") +
-  scale_fill_viridis_d() +
-  scale_colour_viridis_d() +
-  my.theme
+  scale_fill_manual(values=c("steelblue3", "chartreuse3", "coral2", "gold1")) +
+  xlab("Relative selection coefficient") +
+  my.theme +
+  theme(axis.title.y = element_blank())
 
+ggsave(plot.betas, filename="Figures/Betas.jpeg", width=12, height=8)
 
 #4. Summary statistics----
 dat <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
