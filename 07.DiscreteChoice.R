@@ -3,6 +3,7 @@ library(jagsUI)
 library(coda)
 library(data.table)
 library(sf)
+library(ggridges)
 
 options(scipen = 9999)
 
@@ -68,6 +69,7 @@ outM <- list()
 model.list <- list()
 summary.list <- list()
 betas.list <- list()
+betas.ind.list <- list()
 fit.list <- list()
 
 for(i in 1:nrow(loop)){
@@ -200,6 +202,15 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
                                 scale=scale.i,
                                 season=season.i)
   
+  betas.ind.list[[i]] <- rbind(data.frame(outM$sims.list$beta1) %>% 
+                                 mutate(beta="beta1"),
+                               data.frame(outM$sims.list$beta2) %>% 
+                                 mutate(beta="beta2"),
+                               data.frame(outM$sims.list$beta3) %>% 
+                                 mutate(beta="beta3"),
+                               data.frame(outM$sims.list$beta4) %>% 
+                                 mutate(beta="beta4"))
+  
   fit.list[[i]] <- data.frame(fit.data=outM$sims.list$fit.data,
                          fit.sim=outM$sims.list$fit.sim,
                          bpv=outM$sims.list$bpv,
@@ -222,7 +233,7 @@ fit <- rbindlist(fit.list) %>%
 
 #11. Save workspace----
 #save.image("CONIRoosting_WorkSpace.Rdata")
-#load("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/CONIRoosting_WorkSpace.Rdata")
+load("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/CONIRoosting_WorkSpace.Rdata")
 
 #12. Save out traceplots----
 for(i in 1:nrow(loop)){
@@ -277,18 +288,21 @@ betas$cov <- case_when(betas$beta=="beta1" ~ "evi",
 
 betas$scale <- factor(betas$scale, levels=c("pt", "hr"))
 
-betas.0 <- betas %>% 
-  right_join(overlap.0)
+betas.ci <- betas %>% 
+  full_join(overlap) %>% 
+  rename(lower = 'X2.5.', upper = 'X97.5.') %>% 
+  dplyr::filter(value > lower, value < upper) %>% 
+  mutate(cov = as.factor(cov))
 
-write.csv(betas.0, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv", row.names = FALSE)
+write.csv(betas.ci, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv", row.names = FALSE)
 
-ggplot(betas) +
-  geom_density(aes(x=value, colour=season)) +
-  geom_density(data=betas.0, aes(x=value, fill=season, colour=season), alpha=0.5, show.legend = FALSE) +
+ggplot(betas.ci) +
+  geom_density_ridges(aes(x=value, y=season, fill=season), show.legend = FALSE) +
   geom_vline(aes(xintercept=0)) +
-  facet_grid(scale ~ cov, scales="free")
+  facet_grid(scale ~ cov, scales="free") +
+  scale_fill_viridis_d()
 
-ggsave(filename="Figures/Betas.jpeg", width=14, height=8)
+ggsave(filename="Figures/Betas.jpeg", width=12, height=8)
 
 ggplot(betas %>% 
          dplyr::filter(cov %in% c("water"))) +
@@ -314,7 +328,7 @@ fit.sum <- fit %>%
   ungroup()
 View(fit.sum)
 
-#16. Prior predictive check----
+#17. Prior predictive check----
 
 sink("Mixed model prior check.txt")
 cat("model{    
@@ -358,4 +372,27 @@ outMcheck = jags(win.data.check, inits, params.check, "Mixed model prior check.t
 jagsUI::traceplot(outMcheck)
 jagsUI::densityplot(outMcheck)
 
+#18. Cov overlap----
+overlap.cov <- overlap %>% 
+  rename(lower = 'X2.5.', upper = 'X97.5.') %>% 
+  dplyr::select(season, scale, cov, mean, lower, upper) %>% 
+  arrange(scale, cov, season)
 
+#19. Individual-level betas----
+beta1 <- data.frame(outM$sims.list$beta1) %>% 
+  mutate(cov="evi") %>% 
+  pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
+beta2 <- data.frame(outM$sims.list$beta2) %>% 
+  mutate(cov="tree") %>% 
+  pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
+beta3 <- data.frame(outM$sims.list$beta3) %>% 
+  mutate(cov="crop") %>% 
+  pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
+beta4 <- data.frame(outM$sims.list$beta4) %>% 
+  mutate(cov="water") %>% 
+  pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
+beta.id <- rbind(beta1, beta2, beta3, beta4)
+
+ggplot(beta1) +
+  geom_density_ridges(aes(x=beta, y=bird)) +
+  xlim(c(-10, 10))
