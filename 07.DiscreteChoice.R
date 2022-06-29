@@ -27,12 +27,12 @@ dat <- rbind(pt, hr) %>%
 #2. Visualize covs for polynomials----
 ggplot(dat, aes(x=tree, y=used, colour=scale)) + 
 #  geom_point() +
-  geom_smooth() +
+  geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
 ggplot(dat, aes(x=waterdist, y=used, colour=scale)) + 
 #  geom_point() +
-  geom_smooth(method="lm") +
+  geom_smooth() +
   facet_wrap(~Season, scales="free")
 
 ggplot(dat, aes(x=water, y=used, colour=scale)) + 
@@ -55,9 +55,21 @@ ggplot(dat, aes(x=evi, y=used, colour=scale)) +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat %>% dplyr::filter(Season=="Winter", scale=="pt", water > 0)) +
-  geom_histogram(aes(x=water)) +
-  facet_wrap(~used, scales="free")
+ggplot(dat, aes(x=treecover, y=used, colour=scale)) + 
+  #  geom_point() +
+  geom_smooth(method="lm") +
+  facet_wrap(~Season, scales="free")
+
+ggplot(dat, aes(x=patch, y=used, colour=scale)) + 
+  #  geom_point() +
+  geom_smooth(method="lm") +
+  facet_wrap(~Season, scales="free")
+
+ggplot(dat, aes(x=bare, y=used, colour=scale)) + 
+  #  geom_point() +
+  geom_smooth(method="lm") +
+  facet_wrap(~Season, scales="free")
+
 
 #2. Set up loop----
 loop <- dat %>% 
@@ -101,9 +113,9 @@ for(i in 1:nrow(loop)){
   bird <- pt.breed.bird$BirdID
   
   #a matrix with the same dimensions as y that specifies the first explanatory variable for each set-by-choice combination
-  X1 <- matrix(dat.i$evi.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X2 <- matrix(dat.i$tree.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X3 <- matrix(dat.i$cropdist.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X1 <- matrix(dat.i$cover.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X2 <- matrix(dat.i$patch.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X3 <- matrix(dat.i$evi.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
   X4 <- matrix(dat.i$waterdist.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
 
   #max value in the bird vector above (i.e., an integer representing how many unique birds there are)
@@ -134,7 +146,7 @@ for(b in 1:nbirds){
 beta1[b] ~ dnorm(mu.beta1, tau.beta1)    
 beta2[b] ~ dnorm(mu.beta2, tau.beta2)    
 beta3[b] ~ dnorm(mu.beta3, tau.beta3)    
-beta4[b] ~ dnorm(mu.beta4, tau.beta4)    
+beta4[b] ~ dnorm(mu.beta4, tau.beta4)   
 }    
 
 #Likelihood   
@@ -143,8 +155,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
     ysim[i,1:nchoices[i]] ~ dmulti(p[i,1:nchoices[i]],1)    
     
     for(j in 1:nchoices[i]){    
-    log(phi[i,j]) <- beta1[bird[i]]*X1[i,j] + beta2[bird[i]]*X2[i,j]+ beta3[bird[i]]*X3[i,j] + beta4[bird[i]]*X4[i,j] 
-#    log(phi[i,j]) <- beta1[bird[i]]*1 + beta2[bird[i]]*1+ beta3[bird[i]]*1 + beta4[bird[i]]*1 
+    log(phi[i,j]) <- beta1[bird[i]]*X1[i,j] + beta2[bird[i]]*X2[i,j]+ beta3[bird[i]]*X3[i,j] + beta4[bird[i]]*X4[i,j]
     
     p[i,j] <- phi[i,j]/(sum(phi[i,1:nchoices[i]]))    
     
@@ -178,7 +189,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
              "p", "fit.data", "fit.sim", "bpv")
 
   #Number of chains, iterations, burnin, and thinning 
-  nc=3; ni=500000; nb=100000; nt=50; na=1000 
+  nc=3; ni=300000; nb=100000; nt=50; na=1000 
   
   #7. Run JAGS----
   outM = jags(win.data, inits, params, "Mixed model.txt", n.chains=nc, n.thin=nt, n.iter=ni, n.burnin=nb, parallel=T, n.adapt = 1000)
@@ -232,8 +243,8 @@ fit <- rbindlist(fit.list) %>%
   mutate(p = ifelse(bpv>=0, 1, 0))
 
 #11. Save workspace----
-#save.image("CONIRoosting_WorkSpace.Rdata")
-load("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/CONIRoosting_WorkSpace.Rdata")
+#save.image("CONIRoosting_WorkSpace_V2.Rdata")
+#load("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/CONIRoosting_WorkSpace_V2.Rdata")
 
 #12. Save out traceplots----
 for(i in 1:nrow(loop)){
@@ -263,10 +274,10 @@ for(i in 1:nrow(loop)){
 #13. Beta overlap----
 overlap <- summary %>% 
   dplyr::filter(val %in% c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5")) %>% 
-  mutate(cov = case_when(val=="mu.beta1" ~ "evi",
-                         val=="mu.beta2" ~ "tree",
-                         val=="mu.beta3" ~ "crop",
-                         val=="mu.beta4" ~ "water"))
+  mutate(cov = case_when(val=="mu.beta1" ~ "cover",
+                         val=="mu.beta2" ~ "patch",
+                         val=="mu.beta3" ~ "evi",
+                         val=="mu.beta4" ~ "waterdist"))
 
 overlap$scale <- factor(overlap$scale, levels=c("pt", "hr"))
 
@@ -281,10 +292,10 @@ overlap.0 <- overlap %>%
 table(overlap.0$season, overlap.0$scale)
 
 #14. Density plots----
-betas$cov <- case_when(betas$beta=="beta1" ~ "evi",
-                       betas$beta=="beta2" ~ "tree",
-                       betas$beta=="beta3" ~ "crop",
-                       betas$beta=="beta4" ~ "water")
+betas$cov <-  case_when(betas$beta=="beta1" ~ "cover",
+                        betas$beta=="beta2" ~ "patch",
+                        betas$beta=="beta3" ~ "evi",
+                        betas$beta=="beta4" ~ "waterdist")
 
 betas$scale <- factor(betas$scale, levels=c("pt", "hr"))
 
@@ -302,14 +313,6 @@ ggplot(betas.ci) +
   facet_grid(scale ~ cov, scales="free") +
   scale_fill_viridis_d()
 
-ggsave(filename="Figures/Betas.jpeg", width=12, height=8)
-
-ggplot(betas %>% 
-         dplyr::filter(cov %in% c("water"))) +
-  geom_density(aes(x=value, colour=season)) +
-  geom_vline(aes(xintercept=0)) +
-  facet_grid(scale ~ season, scales="free")
-
 #15. Looking for nonconvergence----
 summary.rhat <- summary %>% 
   dplyr::filter(Rhat > 1.1)
@@ -317,6 +320,7 @@ summary.rhat <- summary %>%
 #Check for betas that didn't converge
 summary.rhat.beta <- summary.rhat %>% 
   dplyr::filter(str_sub(val, 1, 4)=="beta")
+nrow(summary.rhat.beta)
 
 table(summary.rhat$season, summary.rhat$scale)  
 
