@@ -733,20 +733,35 @@ plot.area <- ggsave(grid.arrange(plot.hist, plot.kde, plot.choice,
 #3. Figure 3 - Selection betas-----
 betas <- read.csv("betas.csv")
 
-betas$cov <- factor(betas$cov, levels=c("tree", "evi", "crop", "water"), labels=c("Forest cover", "EVI", "Distance to crop", "Distance to water"))
+betas$cov <- factor(betas$cov, levels=c("cover", "patch", "evi", "waterdist"), labels=c("% canopy cover", "Forest patch size", "EVI", "Distance to water"))
 betas$scale <- factor(betas$scale, levels=c("pt", "hr"), labels=c("Roost site", "Home range"))
 betas$season <- factor(betas$season, levels=c("SpringMig", "Winter", "FallMig", "Breed"), labels=c("Spring migration", "Winter", "Fall migration", "Breeding"))
 
 plot.betas <- ggplot(betas) +
-  geom_density_ridges(aes(x=value, y=season, fill=season), show.legend = FALSE, colour="grey30", alpha=0.9) +
+  geom_density_ridges(aes(x=value, y=season, fill=season, alpha=factor(overlap0)), show.legend = FALSE, colour="grey30") +
   geom_vline(aes(xintercept=0), linetype="dashed") +
   facet_grid(scale ~ cov, scales="free") +
   scale_fill_manual(values=c("steelblue3", "chartreuse3", "coral2", "gold1")) +
+  scale_alpha_manual(values=c(0.9, 0.4)) +
   xlab("Relative selection coefficient") +
   my.theme +
   theme(axis.title.y = element_blank())
+#plot.betas
 
-ggsave(plot.betas, filename="Figures/Betas.jpeg", width=12, height=8)
+plot.betas.legend <- ggplot(betas) +
+  geom_density_ridges(aes(x=value, y=season, alpha=factor(overlap0)), colour="grey30", fill="grey90") +
+  geom_vline(aes(xintercept=0), linetype="dashed") +
+  facet_grid(scale ~ cov, scales="free") +
+  scale_alpha_manual(values=c(0.9, 0.4), name="95% CI", labels=c("No overlap 0", "Overlap 0")) +
+  xlab("Relative selection coefficient") +
+  my.theme +
+  theme(axis.title.y = element_blank(),
+        legend.position="bottom")
+#plot.betas.legend
+betas.legend <- get_legend(plot.betas.legend)
+
+plot.betas.final <- grid.arrange(plot.betas, betas.legend, nrow=2, ncol=1, heights=c(1, 0.1))
+ggsave(plot.betas.final, filename="Figures/Betas.jpeg", width=10, height=8)
 
 #4. Summary statistics----
 dat <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
