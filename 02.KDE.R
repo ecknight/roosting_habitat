@@ -14,7 +14,7 @@ options(scipen = 999)
 #1. Read in data----
 ids.exclude <- read.csv("Data/ExclusionYearForBirdsWith2BreedingYears.csv") 
 
-dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
+dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat.csv") %>% 
   mutate(PtYear = year(ymd_hms(DateTime))) %>% 
   anti_join(ids.exclude) %>% 
   dplyr::mutate(doy = yday(ymd_hms(DateTime)),
@@ -24,8 +24,7 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
 #2. Identify individuals that don't have enough points for KDE ----
 dat.use <- dat.hab   %>% 
   dplyr::filter(Season %in% c("Breed", "Winter")) %>% 
-  dplyr::filter(Type != "Band", 
-                sun==1)
+  dplyr::filter(Type != "Band")
 
 ids <- data.frame(table(dat.use$PinpointID, dat.use$Season, dat.use$Winter)) %>% 
   dplyr::filter(Freq>5) %>% 
@@ -60,10 +59,11 @@ dat.kde.m <- dat.kde %>%
   rename(tag.local.identifier=ID,
          location.lat=Lat,
          location.long=Long,
-         timestamp=DateTime) 
+         timestamp=DateTime) %>% 
+  unique() %>% 
+  arrange(tag.local.identifier, timestamp)
 
 write.csv(dat.kde.m, "KDEData.csv", row.names = FALSE)
-
 
 #6. Format for ctmm----
 datt <- as.telemetry(dat.kde.m, timezone="UTC")
@@ -140,11 +140,14 @@ write.csv(m.area.clean, "KDEArea.csv", row.names = FALSE)
 #10. Test for effects of things----
 #10a. Stationary seasons----
 m.area.stat <- m.area.clean %>% 
-  dplyr::filter(Season %in% c("Breed", "Winter"))
+  dplyr::filter(Season %in% c("Breed", "Winter")) %>% 
+  group_by(PinpointID, Season) %>% 
+  sample_n(1) %>% 
+  ungroup()
 
-lm.stat <- lmer(est.km ~ Season*n + (1|PinpointID), data=m.area.stat, na.action="na.fail", REML=FALSE)
+lm.stat <- lm(est.km ~ Season*n + Sex*Season, data=m.area.stat, na.action="na.fail")
 dredge(lm.stat, rank="AICc")
-lm.stat.use <- lmer(est.km ~ Season + (1|PinpointID), data=m.area.stat, na.action="na.fail")
+lm.stat.use <- lm(est.km ~ Season + (1|PinpointID), data=m.area.stat, na.action="na.fail")
 summary(lm.stat.use)
 
 #10b. Migration----
