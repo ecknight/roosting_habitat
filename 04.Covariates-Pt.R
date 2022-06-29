@@ -97,7 +97,7 @@ for(i in 1:length(years)){
     
     #13. Pivot, remove nas, and filter to closest temporal match, randomly pick one if two closest dates----
     set.seed(1234)
-    data.piv <- data.evi %>% 
+    data.evi.p <- data.evi %>% 
       pivot_longer(cols=c(10:ncol(data.evi)),
                    names_to="imagedate",
                    values_to="EVI") %>% 
@@ -204,16 +204,61 @@ for(i in 1:length(years)){
       data.patch <- data.patch %>% 
         mutate(patch=0)
     }
+    
+    #28. Load ALAN image collection----
+    start<-paste0(year.i, "-01-01")
+    end<-paste0(year.i,"-12-31")
+    alancoll<-ee$ImageCollection('NOAA/VIIRS/DNB/MONTHLY_V1/VCMSLCFG')$filterDate(start,end)$select("avg_rad")
+    
+    #29. Extract EVI point values----
+    data.alan <- ee_extract(
+      x = alancoll,
+      y = datasf,
+      scale = 500,
+      sf = FALSE
+    )
+    
+    #30. Pivot, remove nas, and filter to closest temporal match, randomly pick one if two closest dates----
+    set.seed(1234)
+    data.alan.p <- data.alan %>% 
+      pivot_longer(cols=c(10:ncol(data.alan)),
+                   names_to="imagedate",
+                   values_to="ALAN") %>% 
+      dplyr::filter(!is.na(ALAN)) %>% 
+      mutate(imagedate = ymd(str_sub(imagedate, 2, 9)),
+             timestamp = ymd(str_sub(timestamp, 1, 10)),
+             datediff = as.numeric(abs(timestamp - imagedate))) %>% 
+      group_by(ptIDn) %>% 
+      mutate(mindiff = min(datediff)) %>% 
+      dplyr::filter(datediff == mindiff) %>%
+      sample_n(1) %>% 
+      ungroup() %>% 
+      mutate(year = year.i) %>% 
+      dplyr::select(-timestamp) %>% 
+      right_join(data.j)
+    
+    #31. Load human modification image----
+    hmi <- ee$ImageCollection('CSP/HM/GlobalHumanModification')
+    
+    #15. Extract Copernicus point values----
+    data.hmi <- ee_extract(
+      x = hmi,
+      y = datasf,
+      scale = 1000,
+      sf = FALSE
+    )
 
-    #28. Put all data sources together----
-    data.cov <- full_join(data.piv, data.lc) %>% 
+    #31. Put all data sources together----
+    data.cov <- full_join(data.evi.p, data.lc) %>% 
       full_join(data.openwater) %>% 
       full_join(data.wetland) %>% 
       full_join(data.crop) %>% 
       full_join(data.gfcc) %>% 
-      full_join(data.patch)
+      full_join(data.patch) %>% 
+      full_join(data.alan.p) %>% 
+      full_join(data.hmi)
 
-    #29. Save to list----
+    #32. Save to list----
     data.year[[j]] <- data.cov
     
     end_time <- Sys.time()
@@ -226,11 +271,12 @@ for(i in 1:length(years)){
   
 }
 
-#25. Convert to dataframe & save----
+#33. Convert to dataframe & save----
 data.all <- rbindlist(data.out, fill=TRUE) %>% 
   mutate(doy = yday(ymd_hms(timestamp))) %>% 
   right_join(trackingdata) %>% 
-  unique()
+  unique() %>% 
+  rename(HMI = X2016_gHM)
 
 write.csv(data.all, "Data/Covariates_pt_raw.csv")
 
@@ -242,7 +288,7 @@ data.n <- table(data.all$ptIDn) %>%
   dplyr::filter(Freq > 1) %>% 
   left_join(data.all)
 
-#26. Read in tracking data for season info----
+#34. Read in tracking data for season info----
 dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
   dplyr::filter(Type != "Band") %>% 
   group_by(PinpointID) %>% 
@@ -250,9 +296,9 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
   ungroup() %>% 
   mutate(ptID = paste0(PinpointID,"-", row)) %>% 
   arrange(ptID) %>% 
-  dplyr::select(ptID, Year, Season, Winter)
+  dplyr::select(ptID, Sex, Year, Season, Winter)
 
-#27. Put everything together, filter out winter migration points----
+#35. Put everything together, filter out winter migration points----
 data.covs <- data.all %>% 
   rename_with(~gsub(pattern=".coverfraction", replacement="", .x)) %>% 
   mutate(water = water.permanent + water.seasonal,
@@ -263,12 +309,12 @@ data.covs <- data.all %>%
          waterdist = ifelse(waterdist1==1, openwaterdist, wetlanddist)) %>% 
   left_join(dat.hab) %>% 
   separate(ptID, into=c("pinpointID", "n"), remove=FALSE) %>% 
-dplyr::select(pinpointID, ptID, Radius, Type, timestamp, Season, Winter, X, Y, datediff, EVI, bare, crops, grass, moss, shrub, tree, water, waterdist, cropdist, treecover, patch) %>% 
+dplyr::select(pinpointID, Sex, ptID, Radius, Type, timestamp, Season, Winter, X, Y, datediff, EVI, bare, crops, grass, moss, shrub, tree, water, waterdist, cropdist, treecover, patch, ALAN, HMI) %>% 
   dplyr::filter(!is.na(tree),
                 !is.na(EVI),
                 !Season=="WinterMig")
 
-#28. Take out points with less than n available points with covs----
+#36. Take out points with less than n available points with covs----
 pt.n.0 <- table(data.covs$ptID, data.covs$Type) %>% 
   data.frame() %>% 
   rename(ptID=Var1, Type=Var2) %>% 
@@ -286,7 +332,7 @@ data.n <- data.covs %>%
   dplyr::filter(!ptID %in% pt.n.0$ptID,
                 !ptID %in% pt.n.1$ptID)
 
-#29. Randomly sample to n available points per point----
+#37. Randomly sample to n available points per point----
 set.seed(1234)
 data.sub <- data.n %>% 
   dplyr::filter(Type=="Used") %>% 
@@ -297,7 +343,7 @@ data.sub <- data.n %>%
           ungroup()) %>% 
   mutate(used = ifelse(Type=="Used", 1, 0))
 
-#30. Split into seasons, add BirdID field----
+#38. Split into seasons, add BirdID field----
 season <- unique(data.sub$Season)
 
 data.season <- data.frame()
@@ -305,7 +351,7 @@ for(i in 1:length(season)){
   
   data.season.i <- data.sub %>% 
     dplyr::filter(Season==season[i]) %>% 
-    dplyr::select(pinpointID) %>% 
+    dplyr::select(pinpointID, Sex) %>% 
     unique() %>% 
     mutate(BirdID = row_number()) %>% 
     right_join(data.sub %>% 
@@ -321,26 +367,28 @@ for(i in 1:length(season)){
            cropdist.s = scale(cropdist),
            evi.s = scale(EVI),
            cover.s = scale(treecover),
-           patch.s = scale(patch))
+           patch.s = scale(patch),
+           alan.s = scale(ALAN),
+           hmi.s = scale(HMI))
   
   data.season <- rbind(data.season, data.season.i)
   
 }
 
-#31. Write to csv----
+#39. Write to csv----
 write.csv(data.season, "Data/Covariates_pt.csv", row.names=FALSE)
 
-#32. VIF----
+#40. VIF----
 data.season <- read.csv("Data/Covariates_pt.csv")
 
 data.vif <- data.season %>% 
-  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s)
+  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s, alan.s, hmi.s)
 cor(data.vif)
 #grass and tree
 vif(data.vif)
 
 data.vif <- data.season %>% 
-  dplyr::select(grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s)
+  dplyr::select(grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s, alan.s, hmi.s)
 cor(data.vif)
 #grass and tree
 vif(data.vif)
