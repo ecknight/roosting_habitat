@@ -10,66 +10,58 @@ options(scipen = 9999)
 #1. Read in data & put together----
 pt <- read.csv("Data/Covariates_pt.csv") %>% 
   rename(PinpointID = pinpointID, 
-         evi = EVI)
+         evi = EVI,
+         scale = Radius) %>% 
+  dplyr::filter(Sex=="M")= 
+  dplyr::select(PinpointID, BirdID, ptID, scale, used, Season, cover.s, patch.s, evi.s, crops.s, waterdist.s, alan.s, hmi.s)
 
 hr <- read.csv("Data/Covariates_hr.csv") %>% 
   st_as_sf(coords=c("X", "Y"), crs=4326) %>% 
   st_transform(crs=3857) %>% 
   st_coordinates() %>% 
   cbind(read.csv("Data/Covariates_hr.csv") %>% 
-          dplyr::select(-X, -Y))
+          dplyr::select(-X, -Y)) %>% 
+  dplyr::filter(Sex=="M") %>% 
+  rename(scale = Radius) %>% 
+  dplyr::select(PinpointID, BirdID, ptID, scale, used, Season, cover.s, patch.s, evi.s, crops.s, waterdist.s, alan.s, hmi.s)
 
-dat <- rbind(pt, hr) %>% 
-  mutate(water2 = water^2,
-         water2.s = water.s^2,
-         scale = Radius)
+dat <- rbind(pt, hr)
 
 #2. Visualize covs for polynomials----
-ggplot(dat, aes(x=tree, y=used, colour=scale)) + 
+ggplot(dat, aes(x=cover.s, y=used, colour=scale)) + 
 #  geom_point() +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=waterdist, y=used, colour=scale)) + 
+ggplot(dat, aes(x=patch.s, y=used, colour=scale)) + 
 #  geom_point() +
   geom_smooth() +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=water, y=used, colour=scale)) + 
+ggplot(dat, aes(x=evi.s, y=used, colour=scale)) + 
   #  geom_point() +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=cropdist, y=used, colour=scale)) + 
+ggplot(dat, aes(x=alan.s, y=used, colour=scale)) + 
   #  geom_point() +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=crops, y=used, colour=scale)) + 
+ggplot(dat, aes(x=hmi.s, y=used, colour=scale)) + 
   #  geom_point() +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=evi, y=used, colour=scale)) + 
+ggplot(dat, aes(x=waterdist.s, y=used, colour=scale)) + 
   #  geom_point() +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=treecover, y=used, colour=scale)) + 
+ggplot(dat, aes(x=crops.s, y=used, colour=scale)) + 
   #  geom_point() +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
-
-ggplot(dat, aes(x=patch, y=used, colour=scale)) + 
-  #  geom_point() +
-  geom_smooth(method="lm") +
-  facet_wrap(~Season, scales="free")
-
-ggplot(dat, aes(x=bare, y=used, colour=scale)) + 
-  #  geom_point() +
-  geom_smooth(method="lm") +
-  facet_wrap(~Season, scales="free")
-
 
 #2. Set up loop----
 loop <- dat %>% 
@@ -84,8 +76,8 @@ betas.list <- list()
 betas.ind.list <- list()
 fit.list <- list()
 
-for(i in 1:nrow(loop)){
-#for(i in c(5:5)){  
+#for(i in 3:nrow(loop)){
+for(i in c(8:8)){  
   
   #3. Subset data----
   scale.i <- loop$scale[i]
@@ -115,8 +107,8 @@ for(i in 1:nrow(loop)){
   #a matrix with the same dimensions as y that specifies the first explanatory variable for each set-by-choice combination
   X1 <- matrix(dat.i$cover.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
   X2 <- matrix(dat.i$patch.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X3 <- matrix(dat.i$evi.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X4 <- matrix(dat.i$waterdist.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X3 <- matrix(dat.i$hmi.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X4 <- matrix(dat.i$alan.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
 
   #max value in the bird vector above (i.e., an integer representing how many unique birds there are)
   nbirds <- max(bird)
@@ -189,7 +181,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
              "p", "fit.data", "fit.sim", "bpv")
 
   #Number of chains, iterations, burnin, and thinning 
-  nc=3; ni=300000; nb=100000; nt=50; na=1000 
+  nc=3; ni=200000; nb=100000; nt=50; na=1000 
   
   #7. Run JAGS----
   outM = jags(win.data, inits, params, "Mixed model.txt", n.chains=nc, n.thin=nt, n.iter=ni, n.burnin=nb, parallel=T, n.adapt = 1000)
@@ -273,11 +265,11 @@ for(i in 1:nrow(loop)){
 
 #13. Beta overlap----
 overlap <- summary %>% 
-  dplyr::filter(val %in% c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5")) %>% 
+  dplyr::filter(val %in%  c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5")) %>% 
   mutate(cov = case_when(val=="mu.beta1" ~ "cover",
                          val=="mu.beta2" ~ "patch",
-                         val=="mu.beta3" ~ "evi",
-                         val=="mu.beta4" ~ "waterdist"))
+                         val=="mu.beta3" ~ "hmi",
+                         val=="mu.beta4" ~ "alan"))
 
 overlap$scale <- factor(overlap$scale, levels=c("pt", "hr"))
 
@@ -289,13 +281,13 @@ overlap.0 <- overlap %>%
   rename(upper = 'X97.5.',
          lower = 'X2.5.')
 
-table(overlap.0$season, overlap.0$scale)
+table(overlap.0$season, overlap.0$scale, overlap.0$cov)
 
 #14. Density plots----
 betas$cov <-  case_when(betas$beta=="beta1" ~ "cover",
                         betas$beta=="beta2" ~ "patch",
-                        betas$beta=="beta3" ~ "evi",
-                        betas$beta=="beta4" ~ "waterdist")
+                        betas$beta=="beta3" ~ "hmi",
+                        betas$beta=="beta4" ~ "alan")
 
 betas$scale <- factor(betas$scale, levels=c("pt", "hr"))
 
@@ -305,7 +297,7 @@ betas.ci <- betas %>%
   dplyr::filter(value > lower, value < upper) %>% 
   mutate(cov = as.factor(cov))
 
-write.csv(betas.ci, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv", row.names = FALSE)
+#write.csv(betas.ci, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv", row.names = FALSE)
 
 ggplot(betas.ci) +
   geom_density_ridges(aes(x=value, y=season, fill=season), show.legend = FALSE) +
@@ -338,8 +330,8 @@ sink("Mixed model prior check.txt")
 cat("model{    
   
 #Priors
-mu.beta ~ dnorm(0, 0.001)
-tau.beta ~ dexp(01)
+mu.beta ~ dnorm(0, 0.01)
+tau.beta ~ dexp(10)
 sigma.beta <- 1/sqrt(tau.beta)
 
 
@@ -384,19 +376,21 @@ overlap.cov <- overlap %>%
 
 #19. Individual-level betas----
 beta1 <- data.frame(outM$sims.list$beta1) %>% 
-  mutate(cov="evi") %>% 
+  mutate(cov="cover") %>% 
   pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
 beta2 <- data.frame(outM$sims.list$beta2) %>% 
-  mutate(cov="tree") %>% 
+  mutate(cov="patch") %>% 
   pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
 beta3 <- data.frame(outM$sims.list$beta3) %>% 
-  mutate(cov="crop") %>% 
+  mutate(cov="hmi") %>% 
   pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
 beta4 <- data.frame(outM$sims.list$beta4) %>% 
-  mutate(cov="water") %>% 
+  mutate(cov="alan") %>% 
   pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
 beta.id <- rbind(beta1, beta2, beta3, beta4)
 
-ggplot(beta1) +
+ggplot(beta.id) +
   geom_density_ridges(aes(x=beta, y=bird)) +
-  xlim(c(-10, 10))
+  geom_vline(aes(xintercept=0), linetype="dashed") +
+# xlim(c(-10, 10)) +
+  facet_wrap(~cov, scales="free_x")
