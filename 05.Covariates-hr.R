@@ -68,8 +68,6 @@ data.out <- list()
 
 for(i in 1:length(years)){
   
-  start_time <- Sys.time()
-  
   year.i <- years[i]
   
   data.i <- trackingdata %>% 
@@ -80,6 +78,8 @@ for(i in 1:length(years)){
   loops <- max(data.i$n)
   
   for(j in 1:loops){
+    
+    start_time <- Sys.time()
     
     data.j <- data.i %>% 
       dplyr::filter(n==j)
@@ -95,50 +95,50 @@ for(i in 1:length(years)){
     
     #10. Buffer points----
     data.buff <- data$map(buffer_points)
-    
+
     #11. Load EVI image collection----
     start<-paste0(year.i, "-01-01")
     end<-paste0(year.i+1,"-01-01")
     imagecoll<-ee$ImageCollection('LANDSAT/LC08/C01/T1_8DAY_EVI')$filterDate(start,end)
     image  <- imagecoll$select('EVI')$toBands()
-    
+
     #12. Extract buffer mean EVI values----
-    image.evi <- image$reduceRegions(collection=data.buff, 
-                                         reducer=ee$Reducer$mean(), 
+    image.evi <- image$reduceRegions(collection=data.buff,
+                                         reducer=ee$Reducer$mean(),
                                          scale=30)
-    
+
     #13. Export EVI task to google drive----
     task_vector <- ee_table_to_drive(collection=image.evi,
                                     description=paste0("EVI_hr_",year.i,"-",j),
-                                    folder="MCP2",
+                                    folder="MCP3",
                                     timePref=FALSE)
     task_vector$start()
 #    ee_monitoring(task_vector) # optional
-    
+
     #14. Load Copernicus image----
     lc <- ee$Image('COPERNICUS/Landcover/100m/Proba-V-C3/Global/2017')
-    
+
     #15. Extract buffer mean lc values----
-    image.lc <- lc$reduceRegions(collection=data.buff, 
-                                    reducer=ee$Reducer$mean(), 
+    image.lc <- lc$reduceRegions(collection=data.buff,
+                                    reducer=ee$Reducer$mean(),
                                     scale=30)
-    
+
     #16. Export Copernicus task to google drive----
     task_vector <- ee_table_to_drive(collection=image.lc,
                                      description=paste0("LC_hr_",year.i,"-",j),
-                                     folder="MCP2",
+                                     folder="MCP3",
                                      timePref=FALSE)
     task_vector$start()
 #    ee_monitoring(task_vector) # optional
 #    img <- ee_drive_to_local(task = task_vector)
-    
+
     #17. Select only the discrete classification band----
     lcdc <- lc$select('discrete_classification')
-    
+
     #18. Create raster of distance to open water----
     water <- lcdc$mask(lcdc$eq(80))
     openwaterdist <- water$distance(kern, skipMasked=FALSE)$rename("openwaterdist")
-    
+
     #19. Get point value of distance to open water----
     data.openwater <- ee_extract(
       x = openwaterdist,
@@ -146,11 +146,11 @@ for(i in 1:length(years)){
       scale = 100,
       sf = FALSE
     )
-    
+
     #20. Create raster of distance to wetland----
     wetland <- lcdc$mask(lcdc$eq(90))
     wetlanddist <- wetland$distance(kern, skipMasked=FALSE)$rename("wetlanddist")
-    
+
     #21. Get point value of distance to open water----
     data.wetland <- ee_extract(
       x = wetlanddist,
@@ -158,11 +158,11 @@ for(i in 1:length(years)){
       scale = 100,
       sf = FALSE
     )
-    
+
     #22. Create raster of distance to crop----
     crop <- lcdc$mask(lcdc$eq(40))
     cropdist <- crop$distance(kern, skipMasked=FALSE)$rename("cropdist")
-    
+
     #23. Get point value of distance to open water----
     data.crop <- ee_extract(
       x = cropdist,
@@ -170,53 +170,115 @@ for(i in 1:length(years)){
       scale = 100,
       sf = FALSE
     )
-    
+
     #24. Load GFCC image collection----
     gfcc <- ee$ImageCollection("NASA/MEASURES/GFCC/TC/v3")$filterDate('2015-01-01', '2015-01-02')$select('tree_canopy_cover')$mean()
-    
-    #25. Extract buffer mean EVI values----
-    image.gfcc <- gfcc$reduceRegions(collection=data.buff, 
-                                     reducer=ee$Reducer$mean(), 
+
+    #25. Extract buffer mean GFCC values----
+    image.gfcc <- gfcc$reduceRegions(collection=data.buff,
+                                     reducer=ee$Reducer$mean(),
                                      scale=30)
-    
-    #26. Export EVI task to google drive----
+
+    #26. Export GFCC task to google drive----
     task_vector <- ee_table_to_drive(collection=image.gfcc,
                                      description=paste0("GFCC_hr_",year.i,"-",j),
-                                     folder="MCP2",
+                                     folder="MCP3",
                                      timePref=FALSE)
     task_vector$start()
     #ee_monitoring(task_vector) # optional
-    
+
     #27. Mask out forest cover less than 10%----
     cover <- gfcc$gte(30)$selfMask()
-    
+
     #28. Calculate patch size----
     patch <- cover$connectedComponents(connectedness=ee$Kernel$plus(1), maxSize=600)
     patchid <- patch$select('labels')
     patchn <- patchid$connectedPixelCount(maxSize=600, eightConnected=FALSE)
     nsize <- gfcc$pixelArea()
     patchsize <- patchn$multiply(nsize)
-    
+
     #29. Extract buffer mean patch size----
-    image.patch <- patchsize$reduceRegions(collection=data.buff, 
-                                     reducer=ee$Reducer$mean(), 
+    image.patch <- patchsize$reduceRegions(collection=data.buff,
+                                     reducer=ee$Reducer$mean(),
                                      scale=30)
-    
-    #26. Export EVI task to google drive----
+
+    #26. Export patch size task to google drive----
     task_vector <- ee_table_to_drive(collection=image.patch,
                                      description=paste0("Patch_hr_",year.i,"-",j),
-                                     folder="MCP2",
+                                     folder="MCP3",
+                                     timePref=FALSE)
+    task_vector$start()
+        ee_monitoring(task_vector) # optional
+
+    #28. Load ALAN image collection----
+    start<-paste0(year.i, "-01-01")
+    end<-paste0(year.i,"-12-31")
+    alancoll<-ee$ImageCollection('NOAA/VIIRS/DNB/MONTHLY_V1/VCMSLCFG')$filterDate(start,end)$select("avg_rad")$toBands()
+
+    #12. Extract buffer mean ALAN values----
+    image.alan <- alancoll$reduceRegions(collection=data.buff,
+                                     reducer=ee$Reducer$mean(),
+                                     scale=500)
+
+    #13. Export ALAN task to google drive----
+    task_vector <- ee_table_to_drive(collection=image.alan,
+                                     description=paste0("ALAN_hr_",year.i,"-",j),
+                                     folder="MCP3",
                                      timePref=FALSE)
     task_vector$start()
     #    ee_monitoring(task_vector) # optional
+
+    #31. Load human modification image----
+    hmi <- ee$ImageCollection('CSP/HM/GlobalHumanModification')$toBands()
+
+    #32. Extract human modification point values----
+    image.hmi <- hmi$reduceRegions(collection=data.buff,
+                                         reducer=ee$Reducer$mean(),
+                                         scale=1000)
+
+    #13. Export ALAN task to google drive----
+    task_vector <- ee_table_to_drive(collection=image.hmi,
+                                     description=paste0("HMI_hr_",year.i,"-",j),
+                                     folder="MCP3",
+                                     timePref=FALSE)
+    task_vector$start()
+
+    # #33. Load Dynamic World images----
+    # if(year.i %in% c(2015:2017)){
+    #   start<-paste0("2015-06-23")
+    # }
+    # else{
+    #   start<-paste0(year.i-2,"-01-01")
+    # }
+    # end<-paste0(year.i+2,"-12-31")
+    # lc <- ee$ImageCollection('GOOGLE/DYNAMICWORLD/V1')$filterDate(start,end)
+    # 
+    # #34. Select bands of interest and stack----
+    # crop <- lc$select("crops")$mean()
+    # water <- lc$select("water")$mean()
+    # tree <- lc$select("trees")$mean()
+    # dw <- crop$addBands(water)$addBands(tree)
+    # 
+    # #32. Extract DW point values----
+    # image.dw <- dw$reduceRegions(collection=data.buff, 
+    #                                reducer=ee$Reducer$mean(), 
+    #                                scale=10)
+    # 
+    # #13. Export DW task to google drive----
+    # task_vector <- ee_table_to_drive(collection=image.dw,
+    #                                  description=paste0("DW_hr_",year.i,"-",j),
+    #                                  folder="MCP3",
+    #                                  timePref=FALSE)
+    # task_vector$start()
+    
     
     #24. Put all data sources together----
-    data.cov <- full_join(data.openwater, data.wetland) %>% 
+    data.cov <- full_join(data.openwater, data.wetland) %>%
       full_join(data.crop)
-    
+
     #25. Save to list----
     data.year[[j]] <- data.cov
-    
+
     end_time <- Sys.time()
     
     print(paste0("Finished loop ", j, " of ", loops, " for year ", year.i, " in ", end_time - start_time, " seconds"))
@@ -261,6 +323,18 @@ files.patch <- files %>%
   dplyr::filter(image=="Patch", 
                 scale=="hr")
 
+files.alan <- files %>% 
+  dplyr::filter(image=="ALAN", 
+                scale=="hr")
+
+files.hmi <- files %>% 
+  dplyr::filter(image=="HMI", 
+                scale=="hr")
+
+# files.dw <- files %>% 
+#   dplyr::filter(image=="DW", 
+#                 scale=="hr")
+
 #18. Import Copernicus, patch, & gfcc data----
 data.lc <- readr::read_csv(files.lc$filepath, show_col_types = FALSE) %>% 
   dplyr::select(-'system:index', -'.geo', -'date_millis', -Date) %>% 
@@ -283,26 +357,63 @@ data.patch <- readr::read_csv(files.patch$filepath, show_col_types = FALSE) %>%
   rename(patch = mean) %>% 
   mutate(patch = ifelse(is.na(patch), 0, patch))
 
+data.hmi <- readr::read_csv(files.hmi$filepath, show_col_types = FALSE) %>% 
+  dplyr::select(-'system:index', -'.geo', -'date_millis', -Date) %>% 
+  group_by(ptID) %>% 
+  mutate(ptIDn = paste0(ptID,"-",row_number())) %>% 
+  ungroup() %>% 
+  rename(hmi = mean)
+
+# data.dw <- readr::read_csv(files.dw$filepath, show_col_types = FALSE) %>% 
+#   dplyr::select(-'system:index', -'.geo', -'date_millis', -Date) %>% 
+#   group_by(ptID) %>% 
+#   mutate(ptIDn = paste0(ptID,"-",row_number())) %>% 
+#   ungroup() %>% 
+#   rename(treedw = trees, cropdw = crops, waterdw = water)
+
 #19. Import EVI data, pivot, remove nas, and filter to closest temporal match, randomly pick one if two closest dates----
 data.evi <- data.frame()
 for(i in 1:nrow(files.evi)){
   data.file <- read.csv(files.evi$filepath[i]) %>% 
     dplyr::select(-'system.index', -'.geo', -'date_millis', -Date) %>% 
     pivot_longer(cols=c(1:46),
-                 names_to="imagedate",
+                 names_to="eviimagedate",
                  values_to="evi") %>% 
     dplyr::filter(!is.na(evi)) %>% 
-    mutate(imagedate = ymd(str_sub(imagedate, 2, 9)),
+    mutate(eviimagedate = ymd(str_sub(eviimagedate, 2, 9)),
            date = ymd(str_sub(timestamp, 1, 10)),
-           datediff = as.numeric(abs(date - imagedate))) %>% 
+           evidatediff = as.numeric(abs(date - eviimagedate))) %>% 
     group_by(ptIDn) %>% 
-    mutate(mindiff = min(datediff)) %>% 
-    dplyr::filter(datediff == mindiff) %>%
+    mutate(evimindiff = min(evidatediff)) %>% 
+    dplyr::filter(evidatediff == evimindiff) %>%
     sample_n(1) %>% 
     ungroup() %>% 
     unique()
   
   data.evi <- rbind(data.evi, data.file)
+  
+}
+
+#20. Import ALAN data, pivot, remove nas, and filter to closest temporal match, randomly pick one if two closest dates----
+data.alan <- data.frame()
+for(i in 1:nrow(files.alan)){
+  data.file <- read.csv(files.alan$filepath[i]) %>% 
+    dplyr::select(-'system.index', -'.geo', -'date_millis', -Date) %>% 
+    pivot_longer(cols=c(1:36),
+                 names_to="alanimagedate",
+                 values_to="alan") %>% 
+    dplyr::filter(!is.na(alan)) %>% 
+    mutate(alanimagedate = ymd(str_sub(alanimagedate, 2, 9)),
+           date = ymd(str_sub(timestamp, 1, 10)),
+           alandatediff = as.numeric(abs(date - alanimagedate))) %>% 
+    group_by(ptIDn) %>% 
+    mutate(alanmindiff = min(alandatediff, na.rm=TRUE)) %>% 
+    dplyr::filter(alandatediff == alanmindiff) %>%
+    sample_n(1) %>% 
+    ungroup() %>% 
+    unique()
+  
+  data.alan <- rbind(data.alan, data.file)
   
 }
 
@@ -312,12 +423,18 @@ data.join <- data.evi %>%
   full_join(data.lc) %>% 
   full_join(data.gfcc) %>% 
   full_join(data.patch) %>% 
+  full_join(data.hmi) %>% 
+#  full_join(data.dw) %>% 
+  full_join(data.alan %>% 
+              mutate(timestamp = ymd_hms(timestamp)) %>% 
+              dplyr::select(-date)) %>% 
   full_join(trackingdata %>% 
                mutate(timestamp = ymd_hms(timestamp)) %>% 
               dplyr::select(ptIDn, X, Y)) %>% 
   unique() %>% 
   full_join(data.all %>% 
-              mutate(timestamp = ymd_hms(timestamp)))
+            mutate(timestamp = ymd_hms(timestamp)) %>% 
+            dplyr::select(-X, -Y))
 
 #21. Read in tracking data for season info----
 dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
@@ -327,7 +444,7 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
   ungroup() %>% 
   mutate(ptID = paste0(PinpointID,"-", row)) %>% 
   arrange(ptID) %>% 
-  dplyr::select(PinpointID, ptID, Year, Season, Winter)
+  dplyr::select(PinpointID, Sex, ptID, Year, Season, Winter)
 
 #22. Put everything together, filter out winter migration points----
 data.covs <- data.join %>% 
@@ -341,10 +458,12 @@ data.covs <- data.join %>%
          waterdist = ifelse(waterdist1==1, openwaterdist, wetlanddist)) %>% 
   left_join(dat.hab) %>% 
   separate(ptID, into=c("PinpointID", "n"), remove=FALSE) %>% 
-  dplyr::select(PinpointID, ptID, Radius, Type, timestamp, Season, Winter, X, Y, datediff, evi, bare, crops, grass, moss, shrub, tree, water, waterdist, cropdist, treecover, patch) %>% 
+  dplyr::select(PinpointID, Sex, ptID, Radius, Type, timestamp, Season, Winter, X, Y, evidatediff, alandatediff, evi, bare, crops, grass, moss, shrub, tree, water, waterdist, cropdist, treecover, patch, alan, hmi) %>% 
   dplyr::filter(!is.na(tree),
                 !is.na(evi),
                 !is.na(treecover),
+                !is.na(hmi),
+                !is.na(alan),
                 !Season=="WinterMig")
 
 #23. Take out IDs with less than 20 available points with covs & IDs with no used point----
@@ -384,7 +503,7 @@ for(i in 1:length(season)){
   
   data.season.i <- data.sub %>% 
     dplyr::filter(Season==season[i]) %>% 
-    dplyr::select(PinpointID) %>% 
+    dplyr::select(PinpointID, Sex) %>% 
     unique() %>% 
     mutate(BirdID = row_number()) %>% 
     right_join(data.sub %>% 
@@ -400,7 +519,9 @@ for(i in 1:length(season)){
            waterdist.s = scale(waterdist),
            cropdist.s = scale(cropdist),
            cover.s = scale(treecover),
-           patch.s = scale(patch))
+           patch.s = scale(patch),
+           alan.s = scale(alan),
+           hmi.s = scale(hmi))
   
   data.season <- rbind(data.season, data.season.i)
   
@@ -413,7 +534,7 @@ write.csv(data.season, "Data/Covariates_hr.csv", row.names=FALSE)
 data.season <- read.csv("Data/Covariates_hr.csv")
 
 data.vif <- data.season %>% 
-  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s) %>% 
+  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s, alan.s, hmi.s) %>% 
   data.frame()
 cor(data.vif)
 #grass and tree
@@ -421,14 +542,22 @@ vif(data.vif)
 
 #Take out tree
 data.vif <- data.season %>% 
-  dplyr::select(grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s) %>% 
+  dplyr::select(grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s, alan.s, hmi.s) %>% 
   data.frame()
 cor(data.vif)
 vif(data.vif)
 
 #Take out grass
 data.vif <- data.season %>% 
-  dplyr::select(shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s) %>% 
+  dplyr::select(shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s, alan.s, hmi.s) %>% 
+  data.frame()
+cor(data.vif)
+vif(data.vif)
+
+#actual set
+library(usdm)
+data.vif <- data.season %>% 
+  dplyr::select(cover.s, patch.s, evi.s, crops.s, waterdist.s) %>% 
   data.frame()
 cor(data.vif)
 vif(data.vif)
