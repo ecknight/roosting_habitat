@@ -243,34 +243,34 @@ for(i in 1:length(years)){
                                      timePref=FALSE)
     task_vector$start()
 
-    # #33. Load Dynamic World images----
-    # if(year.i %in% c(2015:2017)){
-    #   start<-paste0("2015-06-23")
-    # }
-    # else{
-    #   start<-paste0(year.i-2,"-01-01")
-    # }
-    # end<-paste0(year.i+2,"-12-31")
-    # lc <- ee$ImageCollection('GOOGLE/DYNAMICWORLD/V1')$filterDate(start,end)
-    # 
-    # #34. Select bands of interest and stack----
-    # crop <- lc$select("crops")$mean()
-    # water <- lc$select("water")$mean()
-    # tree <- lc$select("trees")$mean()
-    # dw <- crop$addBands(water)$addBands(tree)
-    # 
-    # #32. Extract DW point values----
-    # image.dw <- dw$reduceRegions(collection=data.buff, 
-    #                                reducer=ee$Reducer$mean(), 
-    #                                scale=10)
-    # 
-    # #13. Export DW task to google drive----
-    # task_vector <- ee_table_to_drive(collection=image.dw,
-    #                                  description=paste0("DW_hr_",year.i,"-",j),
-    #                                  folder="MCP3",
-    #                                  timePref=FALSE)
-    # task_vector$start()
-    
+    #33. Load Dynamic World images----
+    if(year.i %in% c(2015:2017)){
+      start<-paste0("2015-06-23")
+    }
+    else{
+      start<-paste0(year.i-2,"-01-01")
+    }
+    end<-paste0(year.i+2,"-12-31")
+    lc <- ee$ImageCollection('GOOGLE/DYNAMICWORLD/V1')$filterDate(start,end)
+
+    #34. Select bands of interest and stack----
+    crop <- lc$select("crops")$mean()
+    water <- lc$select("water")$mean()
+    tree <- lc$select("trees")$mean()
+    dw <- crop$addBands(water)$addBands(tree)
+
+    #32. Extract DW meanpoint values----
+    image.dw <- dw$reduceRegions(collection=data.buff,
+                                   reducer=ee$Reducer$mean(),
+                                   scale=10)
+
+    #13. Export DW task to google drive----
+    task_vector <- ee_table_to_drive(collection=image.dw,
+                                     description=paste0("DW_hr_",year.i,"-",j),
+                                     folder="MCP4",
+                                     timePref=FALSE)
+    task_vector$start()
+    ee_monitoring(task_vector, max_attempts=100) # optional
     
     #24. Put all data sources together----
     data.cov <- full_join(data.openwater, data.wetland) %>%
@@ -331,9 +331,9 @@ files.hmi <- files %>%
   dplyr::filter(image=="HMI", 
                 scale=="hr")
 
-# files.dw <- files %>% 
-#   dplyr::filter(image=="DW", 
-#                 scale=="hr")
+files.dw <- files %>%
+  dplyr::filter(image=="DW",
+                scale=="hr")
 
 #18. Import Copernicus, patch, & gfcc data----
 data.lc <- readr::read_csv(files.lc$filepath, show_col_types = FALSE) %>% 
@@ -364,12 +364,12 @@ data.hmi <- readr::read_csv(files.hmi$filepath, show_col_types = FALSE) %>%
   ungroup() %>% 
   rename(hmi = mean)
 
-# data.dw <- readr::read_csv(files.dw$filepath, show_col_types = FALSE) %>% 
-#   dplyr::select(-'system:index', -'.geo', -'date_millis', -Date) %>% 
-#   group_by(ptID) %>% 
-#   mutate(ptIDn = paste0(ptID,"-",row_number())) %>% 
-#   ungroup() %>% 
-#   rename(treedw = trees, cropdw = crops, waterdw = water)
+data.dw <- readr::read_csv(files.dw$filepath, show_col_types = FALSE) %>%
+  dplyr::select(-'system:index', -'.geo', -'date_millis', -Date) %>%
+  group_by(ptID) %>%
+  mutate(ptIDn = paste0(ptID,"-",row_number())) %>%
+  ungroup() %>%
+  rename(treedw = trees, cropdw = crops, waterdw = water)
 
 #19. Import EVI data, pivot, remove nas, and filter to closest temporal match, randomly pick one if two closest dates----
 data.evi <- data.frame()
@@ -424,7 +424,7 @@ data.join <- data.evi %>%
   full_join(data.gfcc) %>% 
   full_join(data.patch) %>% 
   full_join(data.hmi) %>% 
-#  full_join(data.dw) %>% 
+  full_join(data.dw) %>% 
   full_join(data.alan %>% 
               mutate(timestamp = ymd_hms(timestamp)) %>% 
               dplyr::select(-date)) %>% 
@@ -458,12 +458,13 @@ data.covs <- data.join %>%
          waterdist = ifelse(waterdist1==1, openwaterdist, wetlanddist)) %>% 
   left_join(dat.hab) %>% 
   separate(ptID, into=c("PinpointID", "n"), remove=FALSE) %>% 
-  dplyr::select(PinpointID, Sex, ptID, Radius, Type, timestamp, Season, Winter, X, Y, evidatediff, alandatediff, evi, bare, crops, grass, moss, shrub, tree, water, waterdist, cropdist, treecover, patch, alan, hmi) %>% 
+  dplyr::select(PinpointID, Sex, ptID, Radius, Type, timestamp, Season, Winter, X, Y, evidatediff, alandatediff, evi, bare, crops, grass, moss, shrub, tree, water, waterdist, cropdist, treecover, patch, alan, hmi, treedw, cropdw, waterdw) %>% 
   dplyr::filter(!is.na(tree),
                 !is.na(evi),
                 !is.na(treecover),
                 !is.na(hmi),
                 !is.na(alan),
+                !is.na(treedw),
                 !Season=="WinterMig")
 
 #23. Take out IDs with less than 20 available points with covs & IDs with no used point----
@@ -521,7 +522,10 @@ for(i in 1:length(season)){
            cover.s = scale(treecover),
            patch.s = scale(patch),
            alan.s = scale(alan),
-           hmi.s = scale(hmi))
+           hmi.s = scale(hmi), 
+           treedw.s = scale(treedw), 
+           cropdw.s = scale(cropdw),
+           waterdw.s = scale(waterdw))
   
   data.season <- rbind(data.season, data.season.i)
   
@@ -534,7 +538,7 @@ write.csv(data.season, "Data/Covariates_hr.csv", row.names=FALSE)
 data.season <- read.csv("Data/Covariates_hr.csv")
 
 data.vif <- data.season %>% 
-  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s, alan.s, hmi.s) %>% 
+  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s, alan.s, hmi.s, treedw.s, cropdw.s, waterdw.s) %>% 
   data.frame()
 cor(data.vif)
 #grass and tree
@@ -557,7 +561,7 @@ vif(data.vif)
 #actual set
 library(usdm)
 data.vif <- data.season %>% 
-  dplyr::select(cover.s, patch.s, evi.s, crops.s, waterdist.s) %>% 
+  dplyr::select(treedw.s, patch.s, evi.s, cropdw.s, waterdw.s) %>% 
   data.frame()
 cor(data.vif)
 vif(data.vif)
