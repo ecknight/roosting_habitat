@@ -12,8 +12,8 @@ pt <- read.csv("Data/Covariates_pt.csv") %>%
   rename(PinpointID = pinpointID, 
          evi = EVI,
          scale = Radius) %>% 
-  dplyr::filter(Sex=="M")= 
-  dplyr::select(PinpointID, BirdID, ptID, scale, used, Season, cover.s, patch.s, evi.s, crops.s, waterdist.s, alan.s, hmi.s)
+  dplyr::filter(Sex=="M") %>% 
+  dplyr::select(PinpointID, BirdID, ptID, scale, used, Season, cover.s, patch.s, evi.s, cropdw.s, waterdw.s)
 
 hr <- read.csv("Data/Covariates_hr.csv") %>% 
   st_as_sf(coords=c("X", "Y"), crs=4326) %>% 
@@ -23,7 +23,7 @@ hr <- read.csv("Data/Covariates_hr.csv") %>%
           dplyr::select(-X, -Y)) %>% 
   dplyr::filter(Sex=="M") %>% 
   rename(scale = Radius) %>% 
-  dplyr::select(PinpointID, BirdID, ptID, scale, used, Season, cover.s, patch.s, evi.s, crops.s, waterdist.s, alan.s, hmi.s)
+  dplyr::select(PinpointID, BirdID, ptID, scale, used, Season, cover.s, patch.s, evi.s, cropdw.s, waterdw.s)
 
 dat <- rbind(pt, hr)
 
@@ -35,7 +35,7 @@ ggplot(dat, aes(x=cover.s, y=used, colour=scale)) +
 
 ggplot(dat, aes(x=patch.s, y=used, colour=scale)) + 
 #  geom_point() +
-  geom_smooth() +
+  geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
 ggplot(dat, aes(x=evi.s, y=used, colour=scale)) + 
@@ -43,22 +43,12 @@ ggplot(dat, aes(x=evi.s, y=used, colour=scale)) +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=alan.s, y=used, colour=scale)) + 
+ggplot(dat, aes(x=waterdw.s, y=used, colour=scale)) + 
   #  geom_point() +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=hmi.s, y=used, colour=scale)) + 
-  #  geom_point() +
-  geom_smooth(method="lm") +
-  facet_wrap(~Season, scales="free")
-
-ggplot(dat, aes(x=waterdist.s, y=used, colour=scale)) + 
-  #  geom_point() +
-  geom_smooth(method="lm") +
-  facet_wrap(~Season, scales="free")
-
-ggplot(dat, aes(x=crops.s, y=used, colour=scale)) + 
+ggplot(dat, aes(x=cropdw.s, y=used, colour=scale)) + 
   #  geom_point() +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
@@ -76,8 +66,8 @@ betas.list <- list()
 betas.ind.list <- list()
 fit.list <- list()
 
-#for(i in 3:nrow(loop)){
-for(i in c(8:8)){  
+for(i in 1:nrow(loop)){
+#for(i in c(8:8)){  
   
   #3. Subset data----
   scale.i <- loop$scale[i]
@@ -107,8 +97,9 @@ for(i in c(8:8)){
   #a matrix with the same dimensions as y that specifies the first explanatory variable for each set-by-choice combination
   X1 <- matrix(dat.i$cover.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
   X2 <- matrix(dat.i$patch.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X3 <- matrix(dat.i$hmi.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X4 <- matrix(dat.i$alan.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X3 <- matrix(dat.i$evi.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X4 <- matrix(dat.i$waterdw.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X5 <- matrix(dat.i$cropdw.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
 
   #max value in the bird vector above (i.e., an integer representing how many unique birds there are)
   nbirds <- max(bird)
@@ -134,11 +125,16 @@ mu.beta4 ~ dnorm(0, 0.01)
 tau.beta4 ~ dexp(10)
 sigma.beta4 <- 1/sqrt(tau.beta4)  
 
+mu.beta5 ~ dnorm(0, 0.01)
+tau.beta5 ~ dexp(10)
+sigma.beta5 <- 1/sqrt(tau.beta5)  
+
 for(b in 1:nbirds){    
 beta1[b] ~ dnorm(mu.beta1, tau.beta1)    
 beta2[b] ~ dnorm(mu.beta2, tau.beta2)    
 beta3[b] ~ dnorm(mu.beta3, tau.beta3)    
 beta4[b] ~ dnorm(mu.beta4, tau.beta4)   
+beta5[b] ~ dnorm(mu.beta5, tau.beta5) 
 }    
 
 #Likelihood   
@@ -147,7 +143,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
     ysim[i,1:nchoices[i]] ~ dmulti(p[i,1:nchoices[i]],1)    
     
     for(j in 1:nchoices[i]){    
-    log(phi[i,j]) <- beta1[bird[i]]*X1[i,j] + beta2[bird[i]]*X2[i,j]+ beta3[bird[i]]*X3[i,j] + beta4[bird[i]]*X4[i,j]
+    log(phi[i,j]) <- beta1[bird[i]]*X1[i,j] + beta2[bird[i]]*X2[i,j]+ beta3[bird[i]]*X3[i,j] + beta4[bird[i]]*X4[i,j] + beta5[bird[i]]*X5[i,j]
     
     p[i,j] <- phi[i,j]/(sum(phi[i,1:nchoices[i]]))    
     
@@ -168,7 +164,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
 
   #6. JAGS parameters----
   #Specify data for JAGS
-  win.data = list(y=y, nsets=nsets,  nchoices=nchoices, bird=bird, X1=X1, X2=X2, X3=X3, X4=X4, nbirds=nbirds)
+  win.data = list(y=y, nsets=nsets,  nchoices=nchoices, bird=bird, X1=X1, X2=X2, X3=X3, X4=X4, X5=X5, nbirds=nbirds)
   
   #Specify initial values
   inits = function()list(mu.beta1=rnorm(1), tau.beta1=runif(1))
@@ -178,6 +174,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
              "mu.beta2", "sigma.beta2", "beta2",           
              "mu.beta3", "sigma.beta3", "beta3",           
              "mu.beta4", "sigma.beta4", "beta4", 
+             "mu.beta5", "sigma.beta5", "beta5", 
              "p", "fit.data", "fit.sim", "bpv")
 
   #Number of chains, iterations, burnin, and thinning 
@@ -202,6 +199,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
                                 beta2=outM$sims.list$mu.beta2,
                                 beta3=outM$sims.list$mu.beta3,
                                 beta4=outM$sims.list$mu.beta4,
+                                beta5=outM$sims.list$mu.beta5,
                                 scale=scale.i,
                                 season=season.i)
   
@@ -212,7 +210,9 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
                                data.frame(outM$sims.list$beta3) %>% 
                                  mutate(beta="beta3"),
                                data.frame(outM$sims.list$beta4) %>% 
-                                 mutate(beta="beta4"))
+                                 mutate(beta="beta4"),
+                               data.frame(outM$sims.list$beta5) %>% 
+                                 mutate(beta="beta5"))
   
   fit.list[[i]] <- data.frame(fit.data=outM$sims.list$fit.data,
                          fit.sim=outM$sims.list$fit.sim,
@@ -230,7 +230,7 @@ beta4[b] ~ dnorm(mu.beta4, tau.beta4)
 model <- rbindlist(model.list)
 summary <- rbindlist(summary.list)
 betas <- rbindlist(betas.list, fill=TRUE) %>% 
-  pivot_longer(beta1:beta4, names_to="beta", values_to="value") 
+  pivot_longer(beta1:beta5, names_to="beta", values_to="value") 
 fit <- rbindlist(fit.list) %>% 
   mutate(p = ifelse(bpv>=0, 1, 0))
 
@@ -244,19 +244,19 @@ for(i in 1:nrow(loop)){
   outM <- readRDS(paste0("Models/DiscreteChoice_", loop$scale[i], "_", loop$Season[i], ".RDS"))
   
   jpeg(paste0("Figures/Traceplots/Traceplot_beta_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
-  jagsUI::traceplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4"))
+  jagsUI::traceplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5"))
   dev.off()
   
   jpeg(paste0("Figures/Traceplots/Densityplot_beta_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
-  jagsUI::densityplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4"))
+  jagsUI::densityplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5"))
   dev.off()
   
   jpeg(paste0("Figures/Traceplots/Traceplot_sigma_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
-  jagsUI::traceplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4"))
+  jagsUI::traceplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4", "mu.beta5"))
   dev.off()
   
   jpeg(paste0("Figures/Traceplots/Densityplot_sigma_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
-  jagsUI::densityplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4"))
+  jagsUI::densityplot(outM, parameters = c("sigma.beta1", "sigma.beta2", "sigma.beta3", "sigma.beta4", "mu.beta5"))
   dev.off()
   
   print(paste0("Finished traceplots ", i, " of ", nrow(loop)))
@@ -268,8 +268,9 @@ overlap <- summary %>%
   dplyr::filter(val %in%  c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5")) %>% 
   mutate(cov = case_when(val=="mu.beta1" ~ "cover",
                          val=="mu.beta2" ~ "patch",
-                         val=="mu.beta3" ~ "hmi",
-                         val=="mu.beta4" ~ "alan"))
+                         val=="mu.beta3" ~ "evi",
+                         val=="mu.beta4" ~ "water",
+                         val=="mu.beta5" ~ "crop"))
 
 overlap$scale <- factor(overlap$scale, levels=c("pt", "hr"))
 
@@ -281,13 +282,14 @@ overlap.0 <- overlap %>%
   rename(upper = 'X97.5.',
          lower = 'X2.5.')
 
-table(overlap.0$season, overlap.0$scale, overlap.0$cov)
+table(overlap.0$season, overlap.0$scale)
 
 #14. Density plots----
 betas$cov <-  case_when(betas$beta=="beta1" ~ "cover",
                         betas$beta=="beta2" ~ "patch",
-                        betas$beta=="beta3" ~ "hmi",
-                        betas$beta=="beta4" ~ "alan")
+                        betas$beta=="beta3" ~ "evi",
+                        betas$beta=="beta4" ~ "water",
+                        betas$beta=="beta5" ~ "crop")
 
 betas$scale <- factor(betas$scale, levels=c("pt", "hr"))
 
@@ -297,10 +299,10 @@ betas.ci <- betas %>%
   dplyr::filter(value > lower, value < upper) %>% 
   mutate(cov = as.factor(cov))
 
-#write.csv(betas.ci, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv", row.names = FALSE)
+write.csv(betas.ci, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv", row.names = FALSE)
 
 ggplot(betas.ci) +
-  geom_density_ridges(aes(x=value, y=season, fill=season), show.legend = FALSE) +
+  geom_density_ridges(aes(x=value, y=season, fill=season, alpha=overlap0), show.legend = FALSE) +
   geom_vline(aes(xintercept=0)) +
   facet_grid(scale ~ cov, scales="free") +
   scale_fill_viridis_d()
