@@ -6,6 +6,7 @@ library(data.table)
 dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
   dplyr::filter(Type != "Band",
                 Season !="WinterMig") %>% 
+  dplyr::filter(!(Sex=="F" & Season=="Breed")) %>% 
   group_by(PinpointID) %>% 
   mutate(row=row_number()) %>% 
   ungroup() %>% 
@@ -56,7 +57,8 @@ write_sf(dat.pt.sf, "Shapefiles/CONIMCP_CleanDataAll_Habitat_Roosting_pt.shp", a
 
 #4. Home range level: Random points within HR size----
 area <- read.csv("KDEAreaMean.csv") %>% 
-  dplyr::filter(is.na(Sex)) %>% 
+  rename(Season = Season2) %>% 
+#  dplyr::filter(is.na(Sex)) %>% 
   mutate(radius = round(radius.mean)) %>% 
   dplyr::select(Season, radius)
 area
