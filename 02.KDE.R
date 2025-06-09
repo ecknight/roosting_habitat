@@ -22,9 +22,11 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat.csv") %>%
                                    !is.na(Season) ~ Season))
 
 #2. Identify individuals that don't have enough points for KDE ----
+#remove females for breeding season
 dat.use <- dat.hab   %>% 
   dplyr::filter(Season %in% c("Breed", "Winter")) %>% 
-  dplyr::filter(Type != "Band")
+  dplyr::filter(Type != "Band") %>% 
+  dplyr::filter(!(Sex=="F" & Season=="Breed"))
 
 ids <- data.frame(table(dat.use$PinpointID, dat.use$Season, dat.use$Winter)) %>% 
   dplyr::filter(Freq>5) %>% 
@@ -40,16 +42,18 @@ dat.kde <- dat.use %>%
          DateTime = ymd_hms(DateTime)) %>% 
   dplyr::select(ID, PinpointID, Season, Population, Mass, Wing, Sex, Winter, Long, Lat, DateTime)
 
-
 #4. Add stopover data----
 dat.mig <- dat.hab %>% 
   dplyr::filter(Season %in% c("FallMig", "SpringMig")) %>% 
   group_by(PinpointID, Season, cluster) %>% 
   mutate(count = n()) %>% 
   ungroup() %>% 
-  dplyr::filter(count >= 5,
-                !is.na(cluster)) %>% 
+  mutate(use = ifelse(count >= 5 & !is.na(cluster), 1, 0)) %>% 
+  # dplyr::filter(count >= 5,
+  #               !is.na(cluster)) %>% 
   mutate(ID = paste0(PinpointID,"-",Season,"-", cluster))
+
+write.csv(dat.mig, "Data/MigrationData.csv", row.names = FALSE)
 
 #5. Put together----
 dat.kde.m <- dat.kde %>% 
