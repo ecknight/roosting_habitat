@@ -49,9 +49,8 @@ trackingdata$Date <- sub(" ", "T", trackingdata$Date) #Put in a format that can 
 #  sample_n(1000)
 
 #5. Set up loop to go through each year----
-years <- unique(trackingdata$year)
+years <- unique(sort(trackingdata$year))
 
-data.year <- list()
 data.out <- list()
 
 for(i in 1:length(years)){
@@ -65,7 +64,7 @@ for(i in 1:length(years)){
            n = ceiling(row/1000))
   
   loops <- max(data.i$n)
-  
+  data.year <- list()
   for(j in 1:loops){
     
     start_time <- Sys.time()
@@ -129,82 +128,41 @@ for(i in 1:length(years)){
     #16. Select only the discrete classification band----
     lcdc <- lc$select('discrete_classification')
     
-    #17. Create raster of distance to open water----
-    water <- lcdc$mask(lcdc$eq(80))
-    openwaterdist <- water$distance(kern, skipMasked=FALSE)$rename("openwaterdist")
-    
-    #18. Get point value of distance to open water----
-    data.openwater <- ee_extract(
-      x = openwaterdist,
-      y = datasf,
-      scale = 100,
-      sf = FALSE
-    )
-    
-    #19. Create raster of distance to wetland----
-    wetland <- lcdc$mask(lcdc$eq(90))
-    wetlanddist <- wetland$distance(kern, skipMasked=FALSE)$rename("wetlanddist")
-    
-    #20. Get point value of distance to wetland----
-    data.wetland <- ee_extract(
-      x = wetlanddist,
-      y = datasf,
-      scale = 100,
-      sf = FALSE
-    )
-    
-    #21. Create raster of distance to crop----
-    crop <- lcdc$mask(lcdc$eq(40))
-    cropdist <- crop$distance(kern, skipMasked=FALSE)$rename("cropdist")
-    
-    #22. Get point value of distance to crop----
-    data.crop <- ee_extract(
-      x = cropdist,
-      y = datasf,
-      scale = 100,
-      sf = FALSE
-    )
-    
-    #23. Load GFCC image collection----
-    gfcc <- ee$ImageCollection("NASA/MEASURES/GFCC/TC/v3")$filterDate('2015-01-01', '2015-01-02')$select('tree_canopy_cover')$mean()
-
-    #24. Get point value of gfcc----
-    data.gfcc <- ee_extract(
-      x = gfcc,
-      y = datasf,
-      scale = 30,
-      sf = FALSE
-    ) %>% 
-      rename(treecover = tree_canopy_cover) %>% 
-      mutate(treecover = ifelse(is.na(treecover), 0, treecover))
-    
-    #25. Mask out forest cover less than 10%----
-    cover <- gfcc$gte(30)$selfMask()
-    
-    #26. Calculate patch size----
-    patch <- cover$connectedComponents(connectedness=ee$Kernel$plus(1), maxSize=500)
-    patchid <- patch$select('labels')
-    patchn <- patchid$connectedPixelCount(maxSize=500, eightConnected=FALSE)
-    nsize <- gfcc$pixelArea()
-    patchsize <- patchn$multiply(nsize)
-    
-    #27. Get point value of patch size----
-    data.patch <- ee_extract(
-      x = patchsize,
-      y = datasf,
-      scale = 30,
-      sf = FALSE
-    )
-    
-    if(ncol(data.patch)==11){
-      data.patch <- data.patch %>% 
-        rename(patch = labels) %>% 
-        mutate(patch = ifelse(is.na(patch), 0, patch))
-    }
-    else{
-      data.patch <- data.patch %>% 
-        mutate(patch=0)
-    }
+    # #17. Create raster of distance to open water----
+    # water <- lcdc$mask(lcdc$eq(80))
+    # openwaterdist <- water$distance(kern, skipMasked=FALSE)$rename("openwaterdist")
+    # 
+    # #18. Get point value of distance to open water----
+    # data.openwater <- ee_extract(
+    #   x = openwaterdist,
+    #   y = datasf,
+    #   scale = 100,
+    #   sf = FALSE
+    # )
+    # 
+    # #19. Create raster of distance to wetland----
+    # wetland <- lcdc$mask(lcdc$eq(90))
+    # wetlanddist <- wetland$distance(kern, skipMasked=FALSE)$rename("wetlanddist")
+    # 
+    # #20. Get point value of distance to wetland----
+    # data.wetland <- ee_extract(
+    #   x = wetlanddist,
+    #   y = datasf,
+    #   scale = 100,
+    #   sf = FALSE
+    # )
+    # 
+    # #21. Create raster of distance to crop----
+    # crop <- lcdc$mask(lcdc$eq(40))
+    # cropdist <- crop$distance(kern, skipMasked=FALSE)$rename("cropdist")
+    # 
+    # #22. Get point value of distance to crop----
+    # data.crop <- ee_extract(
+    #   x = cropdist,
+    #   y = datasf,
+    #   scale = 100,
+    #   sf = FALSE
+    # )
     
     #28. Load ALAN image collection----
     start<-paste0(year.i, "-01-01")
@@ -253,9 +211,7 @@ for(i in 1:length(years)){
     if(year.i %in% c(2015:2017)){
       start<-paste0("2015-06-23")
     }
-    else{
-      start<-paste0(year.i-2,"-01-01")
-    }
+    else {start<-paste0(year.i-2,"-01-01")}
     end<-paste0(year.i+2,"-12-31")
     lc <- ee$ImageCollection('GOOGLE/DYNAMICWORLD/V1')$filterDate(start,end)
     
@@ -285,18 +241,47 @@ for(i in 1:length(years)){
       scale = 10,
       sf = FALSE
     )
+    
+    # #25. Mask out forest cover less than 30%----
+    # cover <- tree$gte(0.3)$selfMask()
+    # 
+    # #26. Calculate patch size----
+    # patch <- cover$connectedComponents(connectedness=ee$Kernel$plus(1), maxSize=500)
+    # patchid <- patch$select('labels')
+    # patchn <- patchid$connectedPixelCount(maxSize=500, eightConnected=FALSE)
+    # nsize <- tree$pixelArea()
+    # patchsize <- patchn$multiply(nsize)
+    # 
+    # #27. Get point value of patch size----
+    # data.patch <- try(ee_extract(
+    #   x = patchsize,
+    #   y = datasf,
+    #   scale = 10,
+    #   sf = FALSE
+    # ))
+    # 
+    # if(ncol(data.patch)==11){
+    #   data.patch <- data.patch %>% 
+    #     rename(patch = labels) %>% 
+    #     mutate(patch = ifelse(is.na(patch), 0, patch))
+    # }
+    # else{
+    #   data.patch <- data.patch %>% 
+    #     mutate(patch=0)
+    # }
 
     #36. Put all data sources together----
+
+    
     data.cov <- full_join(data.evi.p, data.lc) %>% 
-      full_join(data.openwater) %>% 
-      full_join(data.wetland) %>% 
-      full_join(data.crop) %>% 
-      full_join(data.gfcc) %>% 
-      full_join(data.patch) %>% 
+      # full_join(data.openwater) %>% 
+      # full_join(data.wetland) %>% 
+      # full_join(data.crop) %>% 
+      # full_join(data.patch) %>% 
       full_join(data.alan.p) %>% 
       full_join(data.hmi) %>% 
-      full_join(data.tree.dw) %>% 
-      full_join(data.crop.dw) %>% 
+      full_join(data.tree.dw) %>%
+      full_join(data.crop.dw) %>%
       full_join(data.water.dw)
 
     #37. Save to list----
@@ -308,14 +293,14 @@ for(i in 1:length(years)){
     
   }
   
-  data.out[[i]] <- rbindlist(data.year)
+  data.out[[i]] <- rbindlist(data.year, fill=TRUE)
   
 }
 
 #38. Convert to dataframe & save----
 data.all <- rbindlist(data.out, fill=TRUE) %>% 
   mutate(doy = yday(ymd_hms(timestamp))) %>% 
-#  right_join(trackingdata) %>% 
+  right_join(trackingdata) %>% 
   unique() %>% 
   rename(HMI = X2016_gHM,
          treedw = trees,
@@ -346,14 +331,17 @@ dat.hab <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>%
 data.covs <- data.all %>% 
   rename_with(~gsub(pattern=".coverfraction", replacement="", .x)) %>% 
   mutate(water = water.permanent + water.seasonal,
-         openwaterdist = ifelse(is.na(openwaterdist), 30000, openwaterdist),
-         wetlanddist = ifelse(is.na(wetlanddist), 30000, wetlanddist),
-         cropdist = ifelse(is.na(cropdist), 30000, cropdist),
-         waterdist1 = ifelse(openwaterdist<wetlanddist, 1, 0),
-         waterdist = ifelse(waterdist1==1, openwaterdist, wetlanddist)) %>% 
+         # openwaterdist = ifelse(is.na(openwaterdist), 30000, openwaterdist),
+         # wetlanddist = ifelse(is.na(wetlanddist), 30000, wetlanddist),
+         # cropdist = ifelse(is.na(cropdist), 30000, cropdist),
+         #waterdist1 = ifelse(openwaterdist<wetlanddist, 1, 0),
+         # waterdist = ifelse(waterdist1==1, openwaterdist, wetlanddist)
+         )%>% 
   left_join(dat.hab) %>% 
   separate(ptID, into=c("pinpointID", "n"), remove=FALSE) %>% 
-dplyr::select(pinpointID, Sex, ptID, Radius, Type, timestamp, Season, Winter, X, Y, evidatediff, alandatediff, EVI, bare, crops, grass, moss, shrub, tree, water, waterdist, cropdist, treecover, patch, ALAN, HMI, treedw, cropdw, waterdw) %>% 
+dplyr::select(pinpointID, Sex, ptID, Radius, Type, timestamp, Season, Winter, X, Y, evidatediff, alandatediff, EVI, bare, crops, grass, moss, shrub, tree, water,
+#              waterdist, cropdist,
+              patch, ALAN, HMI, treedw, cropdw, waterdw) %>% 
   dplyr::filter(!is.na(tree),
                 !is.na(EVI),
                 !is.na(treedw),
@@ -388,63 +376,13 @@ data.sub <- data.n %>%
           ungroup()) %>% 
   mutate(used = ifelse(Type=="Used", 1, 0))
 
-#43. Split into seasons, add BirdID field----
-season <- unique(data.sub$Season)
-
-data.season <- data.frame()
-for(i in 1:length(season)){
-  
-  data.season.i <- data.sub %>% 
-    dplyr::filter(Season==season[i]) %>% 
-    dplyr::select(pinpointID, Sex) %>% 
-    unique() %>% 
-    mutate(BirdID = row_number()) %>% 
-    right_join(data.sub %>% 
-                 dplyr::filter(Season==season[i])) %>% 
-    arrange(BirdID, ptID, used) %>% 
-    mutate(tree.s = scale(tree),
-           grass.s = scale(grass),
-           shrub.s = scale(shrub),
-           bare.s = scale(bare),
-           crops.s = scale(crops),
-           water.s = scale(water),
-           waterdist.s = scale(waterdist),
-           cropdist.s = scale(cropdist),
-           evi.s = scale(EVI),
-           cover.s = scale(treecover),
-           patch.s = scale(patch),
-           alan.s = scale(ALAN),
-           hmi.s = scale(HMI),
-           treedw.s = scale(treedw),
-           cropdw.s = scale(cropdw),
-           waterdw.s = scale(waterdw))
-  
-  data.season <- rbind(data.season, data.season.i)
-  
-}
-
 #44. Write to csv----
-write.csv(data.season, "Data/Covariates_pt.csv", row.names=FALSE)
+write.csv(data.sub, "Data/Covariates_pt.csv", row.names=FALSE)
 
 #45. VIF----
-data.season <- read.csv("Data/Covariates_pt.csv")
+data.out <- read.csv("Data/Covariates_pt.csv")
 
-data.vif <- data.season %>% 
-  dplyr::select(tree.s, grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s, alan.s, hmi.s, treedw.s, cropdw.s, waterdw.s)
-cor(data.vif)
-#grass and tree
-vif(data.vif)
-
-data.vif <- data.season %>% 
-  dplyr::select(grass.s, shrub.s, bare.s, crops.s, water.s, evi.s, waterdist.s, cropdist.s, cover.s, patch.s, alan.s, hmi.s, treedw.s, cropdw.s, waterdw.s)
-cor(data.vif)
-#grass and tree
-vif(data.vif)
-
-#actual set
-library(usdm)
-data.vif <- data.season %>% 
-  dplyr::select(cover.s, patch.s, evi.s, crops.s, waterdist.s) %>% 
-  data.frame()
+data.vif <- data.out %>% 
+  dplyr::select(EVI, ALAN, HMI, treedw, cropdw, waterdw)
 cor(data.vif)
 vif(data.vif)
