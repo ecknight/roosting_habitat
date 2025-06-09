@@ -1,8 +1,8 @@
 options(scipen = 99999)
 
-library(rgee)
+#library(rgee)
 #ee_install()
-ee_Initialize()
+#ee_Initialize()
 
 library(tidyverse)
 library(sf)
@@ -72,7 +72,7 @@ whemi <- map_data("world", region=c("Canada",
                                     "Paraguay",
                                     "Chile",
                                     "Argentina",
-                                    "Uruguay")) %>% 
+                                    "Uruguay")) |> 
   dplyr::filter(!group%in%c(258:264))
 
 #https://stackoverflow.com/questions/47749078/how-to-put-a-geom-sf-produced-map-on-top-of-a-ggmap-produced-raster
@@ -91,33 +91,36 @@ ggmap_bbox <- function(map) {
 }
 
 #1. Figure 1 - Study area----
+
+#TO DO: ADD TIME OF POINTS BY BEHAVIOUR HISTOGRAM
+
 #Deployment metadata
-pop <- read.csv("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/Data/tbl_population_abundance.csv") %>% 
-  dplyr::filter(Region != "Florida") %>% 
+pop <- read.csv("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/Data/tbl_population_abundance.csv") |> 
+  dplyr::filter(Region != "Florida") |> 
   dplyr::mutate(Region = case_when(Region=="BC coast" ~ "Coastal BC",
                                    Region=="BC Okanagan" ~ "Southcentral BC",
-                                   !is.na(Region) ~ as.character(Region))) %>% 
-  arrange(-Lat) %>% 
+                                   !is.na(Region) ~ as.character(Region))) |> 
+  arrange(-Lat) |> 
   mutate(order=row_number()) 
 
 #Create breeding ground points with number of individuals deployed
-pt.breed <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
-  mutate(Population = ifelse(Population==6, 7, Population)) %>% 
-  dplyr::select(PinpointID, Population) %>% 
-  unique() %>%
-  left_join(pop) %>% 
-  group_by(Population, Lat, Long) %>% 
-  summarize(n=n()) %>% 
+pt.breed <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") |> 
+  mutate(Population = ifelse(Population==6, 7, Population)) |> 
+  dplyr::select(PinpointID, Population) |> 
+  unique() |>
+  left_join(pop) |> 
+  group_by(Population, Lat, Long) |> 
+  summarize(n=n()) |> 
   mutate(Season="Breeding (# tags)",
          Season = factor(Season))
 
 #All data
-dat <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
-  dplyr::filter(Season!="WinterMig") %>% 
+dat <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") |> 
+  dplyr::filter(Season!="WinterMig") |> 
   mutate(DateTime = ymd_hms(DateTime),
          Season = factor(Season, levels=c("Breed", "FallMig", "Winter", "SpringMig"),
-                         labels=c("Breeding (# tags)", "Fall Migration", "Winter", "Spring Migration"))) %>% 
-  arrange(PinpointID, DateTime) %>% 
+                         labels=c("Breeding (# tags)", "Fall Migration", "Winter", "Spring Migration"))) |> 
+  arrange(PinpointID, DateTime) |> 
   dplyr::filter(Season != "Breeding (# tags)")
 
 studyarea <- ggplot() +
@@ -144,12 +147,12 @@ ggsave(studyarea, filename = "Figures/StudyArea.jpeg", height = 6, width = 6)
 
 #2. Figure 2 - KDE & Availability design----
 #2a. Histograms----
-dat.area.all <- read.csv("KDEArea.csv") %>% 
+dat.area.all <- read.csv("KDEArea.csv") |> 
   mutate(Season = ifelse(Season %in% c("FallMig", "SpringMig"), "Migration", Season),
          Season = ifelse(Season=="Breed", "Breeding", Season),
          Season = factor(Season, levels=c("Breeding", "Winter", "Migration")))
 
-plot.hist.breed <- ggplot(dat.area.all %>% 
+plot.hist.breed <- ggplot(dat.area.all |> 
                             dplyr::filter(Season=="Breeding")) +
   geom_histogram(aes(x=est.km), bins=10) +
   ylab("Breeding") +
@@ -161,7 +164,7 @@ plot.hist.breed <- ggplot(dat.area.all %>%
   geom_text(aes(label="A)", x=1, y=3.7), size=14)
 plot.hist.breed
 
-plot.hist.winter <- ggplot(dat.area.all %>% 
+plot.hist.winter <- ggplot(dat.area.all |> 
                             dplyr::filter(Season=="Winter")) +
   geom_histogram(aes(x=est.km), bins=10) +
   ylab("Wintering") +
@@ -172,7 +175,7 @@ plot.hist.winter <- ggplot(dat.area.all %>%
         axis.title.y = element_text(size=20))
 plot.hist.winter
 
-plot.hist.mig <- ggplot(dat.area.all %>% 
+plot.hist.mig <- ggplot(dat.area.all |> 
                              dplyr::filter(Season=="Migration")) +
   geom_histogram(aes(x=est.km), bins=10) +
   scale_y_continuous(breaks=c(0,1,2)) +
@@ -197,43 +200,42 @@ plot.hist <- grid.arrange(plot.hist.breed, plot.hist.winter, plot.hist.mig,
                                                 c(NA)))
 
 #2b. KDE examples----
-kd.shp <- read_sf("Shapefiles/ExampleKDE.shp") %>% 
-  mutate(iso = ifelse(iso=="96%", "95%", iso)) %>% 
-  mutate(iso = factor(iso, levels=c("95%", "75%", "50%", "25%", "5%"))) %>% 
-  mutate(Season=ifelse(Season=="FallMig", "Migration", Season)) %>% 
-  st_transform(crs=3857) %>% 
+kd.shp <- read_sf("Shapefiles/ExampleKDE.shp") |> 
+  mutate(iso = factor(iso, levels=c("95%", "75%", "50%", "25%", "5%"))) |> 
+  mutate(Season=ifelse(Season=="FallMig", "Migration", Season)) |> 
+  st_transform(crs=3857) |> 
   dplyr::filter(ci=="est")
 
-dat.kde <- read.csv("Shapefiles/ExampleKDEData.csv") %>% 
-  st_as_sf(coords=c("location.long", "location.lat"), crs=4326) %>% 
-  st_transform(crs=3857) %>% 
-  st_coordinates() %>% 
-  data.frame() %>% 
-  cbind(read.csv("Shapefiles/ExampleKDEData.csv")) %>% 
-  separate(tag.local.identifier, into=c("PinpointID", "Season", "id"), remove=FALSE) %>% 
-  mutate(Season=ifelse(Season=="FallMig", "Migration", Season)) %>% 
+dat.kde <- read.csv("Shapefiles/ExampleKDEData.csv") 
+  st_as_sf(coords=c("location.long", "location.lat"), crs=4326) |> 
+  st_transform(crs=3857) |> 
+  st_coordinates() |> 
+  data.frame() |> 
+  cbind(read.csv("Shapefiles/ExampleKDEData.csv")) |> 
+  separate(tag.local.identifier, into=c("PinpointID", "Season", "id"), remove=FALSE) |> 
+  mutate(Season=ifelse(Season=="FallMig", "Migration", Season)) |> 
   rename(Lat = location.lat, Long = location.long)
 
 #2bi. Breed----
 #Subset shapefile
-breed.shp <- kd.shp %>% 
+breed.shp <- kd.shp |> 
   dplyr::filter(Season=="Breed")
 
 #Get spatial attributes
-center.breed <- dat.kde %>% 
-  dplyr::filter(Season=="Breed") %>% 
+center.breed <- dat.kde |> 
+  dplyr::filter(Season=="Breed") |> 
   summarize(Long = mean(Long),
             Lat = mean(Lat))
 
-center.breed.shp <- breed.shp %>% 
-  dplyr::filter(iso=="95%") %>% 
-  st_centroid() %>% 
-  st_coordinates() %>% 
+center.breed.shp <- breed.shp |> 
+  dplyr::filter(iso=="95%") |> 
+  st_centroid() |> 
+  st_coordinates() |> 
   data.frame()
 
 bbox.breed <- st_bbox(breed.shp)
 
-width.breed <- data.frame(width = c(bbox.breed[3] - bbox.breed[1], y = bbox.breed[4] - bbox.breed[2])) %>%
+width.breed <- data.frame(width = c(bbox.breed[3] - bbox.breed[1], y = bbox.breed[4] - bbox.breed[2])) |>
   summarize(max = max(width))
 
 #Get background data
@@ -246,7 +248,7 @@ map.breed <- ggmap_bbox(map.breed)
 plot.kde.breed <- ggmap(map.breed) + 
   coord_sf(crs = st_crs(3857)) +
   geom_sf(data = breed.shp, aes(fill=iso), colour="black", alpha = 0.5, inherit.aes=FALSE) +
-  geom_point(data=dat.kde %>% dplyr::filter(Season=="Breed"), aes(x=X, y=Y), size=4, pch=21, colour="black", fill="grey50") +
+  geom_point(data=dat.kde |> dplyr::filter(Season=="Breed"), aes(x=X, y=Y), size=4, pch=21, colour="black", fill="grey50") +
   scale_fill_viridis_d(name="Isopleth %", direction=-1) +
   map.theme +
   theme(axis.title.x = element_blank(),
@@ -269,24 +271,24 @@ plot.kde.breed <- ggmap(map.breed) +
 
 #2bii. Winter----
 #Subset shapefile
-winter.shp <- kd.shp %>% 
+winter.shp <- kd.shp |> 
   dplyr::filter(Season=="Winter")
 
 #Get spatial attributes
-center.winter <- dat.kde %>% 
-  dplyr::filter(Season=="Winter") %>% 
+center.winter <- dat.kde |> 
+  dplyr::filter(Season=="Winter") |> 
   summarize(Long = mean(Long),
             Lat = mean(Lat))
 
-center.winter.shp <- winter.shp %>% 
-  dplyr::filter(iso=="95%") %>% 
-  st_centroid() %>% 
-  st_coordinates() %>% 
+center.winter.shp <- winter.shp |> 
+  dplyr::filter(iso=="95%") |> 
+  st_centroid() |> 
+  st_coordinates() |> 
   data.frame()
 
 bbox.winter <- st_bbox(winter.shp)
 
-width.winter <- data.frame(width = c(bbox.winter[3] - bbox.winter[1], y = bbox.winter[4] - bbox.winter[2])) %>%
+width.winter <- data.frame(width = c(bbox.winter[3] - bbox.winter[1], y = bbox.winter[4] - bbox.winter[2])) |>
   summarize(max = max(width))
 
 #Get background data
@@ -299,7 +301,7 @@ map.winter <- ggmap_bbox(map.winter)
 plot.kde.winter <- ggmap(map.winter) + 
   coord_sf(crs = st_crs(3857)) +
   geom_sf(data = winter.shp, aes(fill=iso), colour="black", alpha = 0.5, inherit.aes=FALSE) +
-  geom_point(data=dat.kde %>% dplyr::filter(Season=="Winter"), aes(x=X, y=Y), size=4, pch=21, colour="black", fill="grey50") +
+  geom_point(data=dat.kde |> dplyr::filter(Season=="Winter"), aes(x=X, y=Y), size=4, pch=21, colour="black", fill="grey50") +
   scale_fill_viridis_d(name="Isopleth %", direction=-1) +
   map.theme +
   theme(axis.title.x = element_blank(),
@@ -321,24 +323,24 @@ plot.kde.winter <- ggmap(map.winter) +
 
 #2biii. Migration----
 #Subset shapefile
-mig.shp <- kd.shp %>% 
+mig.shp <- kd.shp |> 
   dplyr::filter(Season=="Migration")
 
 #Get spatial attributes
-center.mig <- dat.kde %>% 
-  dplyr::filter(Season=="Migration") %>% 
+center.mig <- dat.kde |> 
+  dplyr::filter(Season=="Migration") |> 
   summarize(Long = mean(Long),
             Lat = mean(Lat))
 
-center.mig.shp <- mig.shp %>% 
-  dplyr::filter(iso=="95%") %>% 
-  st_centroid() %>% 
-  st_coordinates() %>% 
+center.mig.shp <- mig.shp |> 
+  dplyr::filter(iso=="95%") |> 
+  st_centroid() |> 
+  st_coordinates() |> 
   data.frame()
 
 bbox.mig <- st_bbox(mig.shp)
 
-width.mig <- data.frame(width = c(bbox.mig[3] - bbox.mig[1], y = bbox.mig[4] - bbox.mig[2])) %>%
+width.mig <- data.frame(width = c(bbox.mig[3] - bbox.mig[1], y = bbox.mig[4] - bbox.mig[2])) |>
   summarize(max = max(width))
 
 #Get background data
@@ -351,7 +353,7 @@ map.mig <- ggmap_bbox(map.mig)
 plot.kde.mig <- ggmap(map.mig) + 
   coord_sf(crs = st_crs(3857)) +
   geom_sf(data = mig.shp, aes(fill=iso), colour="black", alpha = 0.5, inherit.aes=FALSE) +
-  geom_point(data=dat.kde %>% dplyr::filter(Season=="Migration"), aes(x=X, y=Y), size=4, pch=21, colour="black", fill="grey50") +
+  geom_point(data=dat.kde |> dplyr::filter(Season=="Migration"), aes(x=X, y=Y), size=4, pch=21, colour="black", fill="grey50") +
   scale_fill_viridis_d(name="Isopleth %", direction=-1) +
   map.theme +
   theme(axis.title.x = element_blank(),
@@ -375,7 +377,7 @@ plot.kde.mig <- ggmap(map.mig) +
 plot.kde.legend <- ggmap(map.breed) + 
   coord_sf(crs = st_crs(3857)) +
   geom_sf(data = breed.shp, aes(fill=iso), colour="black", alpha = 0.5, inherit.aes=FALSE) +
-  geom_point(data=dat.kde %>% dplyr::filter(Season=="Breed"), aes(x=X, y=Y), size=4, pch=21, colour="black", fill="grey50") +
+  geom_point(data=dat.kde |> dplyr::filter(Season=="Breed"), aes(x=X, y=Y), size=4, pch=21, colour="black", fill="grey50") +
   scale_fill_viridis_d(name="Isopleth", direction=-1) +
   theme(legend.position = "bottom",
         legend.text = element_text(size=14))
@@ -385,7 +387,7 @@ kde.legend <- get_legend(plot.kde.legend)
 #2bv. KDE points legend----
 plot.pt.legend <- ggmap(map.breed) + 
   coord_sf(crs = st_crs(3857)) +
-  geom_point(data=dat.kde %>% dplyr::filter(Season=="Breed"), aes(x=X, y=Y, fill=id), size=4, pch=21, colour="black") +
+  geom_point(data=dat.kde |> dplyr::filter(Season=="Breed"), aes(x=X, y=Y, fill=id), size=4, pch=21, colour="black") +
   scale_fill_manual(values="grey50", labels="GPS point", name="") +
   theme(legend.position = "bottom",
         legend.text = element_text(size=14))
@@ -405,7 +407,7 @@ plot.kde <- grid.arrange(plot.kde.breed, plot.kde.winter, plot.kde.mig,
                                                c(5)))
 
 #2c. Choice set design----
-dat.pt <- read.csv("Data/Covariates_pt.csv") %>% 
+dat.pt <- read.csv("Data/Covariates_pt.csv") |> 
   rename(PinpointID = pinpointID)
 
 dat.hr <- read.csv("Data/Covariates_hr.csv")
@@ -413,28 +415,28 @@ dat.hr <- read.csv("Data/Covariates_hr.csv")
 #2ci. Breed----
 #Select one used point
 set.seed(1234)
-pt.breed <- dat.kde %>% 
-  dplyr::filter(Season=="Breed") %>% 
+pt.breed <- dat.kde |> 
+  dplyr::filter(Season=="Breed") |> 
   sample_n(1)
 
 #Buffer points
-buff.breed.hr <- pt.breed %>% 
-  st_as_sf(coords=c("X", "Y"), crs=3857) %>% 
+buff.breed.hr <- pt.breed |> 
+  st_as_sf(coords=c("X", "Y"), crs=3857) |> 
   st_buffer(dist=5000)
 
 #Select matching choice set points
-pts.breed.hr <- buff.breed.hr %>% 
-  st_sample(size=rep(25, nrow(buff.breed.hr))) %>% 
-  st_coordinates() %>% 
-  data.frame() %>% 
-  mutate(used = 0) %>% 
-  rbind(pt.breed %>% 
-          dplyr::select(X, Y) %>% 
+pts.breed.hr <- buff.breed.hr |> 
+  st_sample(size=rep(25, nrow(buff.breed.hr))) |> 
+  st_coordinates() |> 
+  data.frame() |> 
+  mutate(used = 0) |> 
+  rbind(pt.breed |> 
+          dplyr::select(X, Y) |> 
           mutate(used = 1))
 
 #Buffer matching choice set points to figure out point size (can't use geom_sf because can't have 2 fill scales)
-ptsbuff.breed.hr <- pts.breed.hr %>% 
-  st_as_sf(coords=c("X", "Y"), crs=3857) %>% 
+ptsbuff.breed.hr <- pts.breed.hr |> 
+  st_as_sf(coords=c("X", "Y"), crs=3857) |> 
   st_buffer(dist=300)
 
 #Get background data
@@ -447,12 +449,12 @@ box.sf <- st_polygon(list(rbind(c(center.breed.shp$X-width.breed$max*0.8,
                                 c(center.breed.shp$X+width.breed$max*0.8,
                                   center.breed.shp$Y-width.breed$max*0.8),
                                 c(center.breed.shp$X-width.breed$max*0.8,
-                                  center.breed.shp$Y-width.breed$max*0.8)))) %>% 
-  st_sfc() %>% 
-  st_set_crs(3857) %>% 
+                                  center.breed.shp$Y-width.breed$max*0.8)))) |> 
+  st_sfc() |> 
+  st_set_crs(3857) |> 
   st_transform(crs=4326) 
 
-box <- box.sf %>% 
+box <- box.sf |> 
   sf_as_ee()
 
 lc<-ee$Image('COPERNICUS/Landcover/100m/Proba-V-C3/Global/2017')$select('discrete_classification')
@@ -470,10 +472,10 @@ geom_params <- ee$Geometry$Rectangle(
 #lc.local <- ee_as_raster(lc.clipped, region=geom_params, container="MCP", scale=30)
 
 #Read background data
-lc.r <- raster("Shapefiles/Fig2_lc_breed.tif") %>% 
+lc.r <- raster("Shapefiles/Fig2_lc_breed.tif") |> 
   projectRaster(crs=3857)
-lc.df.breed <- lc.r %>% 
-  rasterToPoints() %>% 
+lc.df.breed <- lc.r |> 
+  rasterToPoints() |> 
   data.frame()
 colnames(lc.df.breed) <- c("x", "y", "landcover")
 
@@ -507,28 +509,28 @@ plot.choice.breed <- ggplot() +
 #2cii. Winter----
 #Select one used point
 set.seed(1234)
-pt.winter <- dat.kde %>% 
+pt.winter <- dat.kde |> 
   dplyr::filter(Season=="Winter", timestamp=="2019-02-12 14:58:08")
 
 #Buffer points
-buff.winter.hr <- pt.winter %>% 
-  st_as_sf(coords=c("X", "Y"), crs=3857) %>% 
+buff.winter.hr <- pt.winter |> 
+  st_as_sf(coords=c("X", "Y"), crs=3857) |> 
   st_buffer(dist=1000)
 
 set.seed(1)
 #Select matching choice set points
-pts.winter.hr <- buff.winter.hr %>% 
-  st_sample(size=rep(25, nrow(buff.winter.hr))) %>% 
-  st_coordinates() %>% 
-  data.frame() %>% 
-  mutate(used = 0) %>% 
-  rbind(pt.winter %>% 
-          dplyr::select(X, Y) %>% 
+pts.winter.hr <- buff.winter.hr |> 
+  st_sample(size=rep(25, nrow(buff.winter.hr))) |> 
+  st_coordinates() |> 
+  data.frame() |> 
+  mutate(used = 0) |> 
+  rbind(pt.winter |> 
+          dplyr::select(X, Y) |> 
           mutate(used = 1))
 
 #Buffer matching choice set points to figure out point size (can't use geom_sf because can't have 2 fill scales)
-ptsbuff.winter.hr <- pts.winter.hr %>% 
-  st_as_sf(coords=c("X", "Y"), crs=3857) %>% 
+ptsbuff.winter.hr <- pts.winter.hr |> 
+  st_as_sf(coords=c("X", "Y"), crs=3857) |> 
   st_buffer(dist=300)
 
 #Get background data
@@ -541,12 +543,12 @@ box.sf <- st_polygon(list(rbind(c(center.winter.shp$X-width.winter$max*2,
                                 c(center.winter.shp$X+width.winter$max*2,
                                   center.winter.shp$Y-width.winter$max*2),
                                 c(center.winter.shp$X-width.winter$max*2,
-                                  center.winter.shp$Y-width.winter$max*2)))) %>% 
-  st_sfc() %>% 
-  st_set_crs(3857) %>% 
+                                  center.winter.shp$Y-width.winter$max*2)))) |> 
+  st_sfc() |> 
+  st_set_crs(3857) |> 
   st_transform(crs=4326) 
 
-box <- box.sf %>% 
+box <- box.sf |> 
   sf_as_ee()
 
 lc<-ee$Image('COPERNICUS/Landcover/100m/Proba-V-C3/Global/2017')$select('discrete_classification')
@@ -564,11 +566,11 @@ geom_params <- ee$Geometry$Rectangle(
 #lc.local <- ee_as_raster(lc.clipped, region=geom_params, container="MCP", scale=30)
 
 #Read background data
-lc.r <- raster("Shapefiles/Fig2_lc_winter.tif") %>% 
+lc.r <- raster("Shapefiles/Fig2_lc_winter.tif") |> 
   projectRaster(crs=3857)
 plot(lc.r)
-lc.df.winter <- lc.r %>% 
-  rasterToPoints() %>% 
+lc.df.winter <- lc.r |> 
+  rasterToPoints() |> 
   data.frame()
 colnames(lc.df.winter) <- c("x", "y", "landcover")
 
@@ -600,27 +602,27 @@ plot.choice.winter <- ggplot() +
 
 #2ciii. Migration----
 set.seed(1234)
-pt.mig <- dat.kde %>% 
+pt.mig <- dat.kde |> 
   dplyr::filter(Season=="Migration", timestamp=="2018-08-27 21:00:11")
 
 #Buffer points
-buff.mig.hr <- pt.mig %>% 
-  st_as_sf(coords=c("X", "Y"), crs=3857) %>% 
+buff.mig.hr <- pt.mig |> 
+  st_as_sf(coords=c("X", "Y"), crs=3857) |> 
   st_buffer(dist=50000)
 
 #Select matching choice set points
-pts.mig.hr <- buff.mig.hr %>% 
-  st_sample(size=rep(25, nrow(buff.mig.hr))) %>% 
-  st_coordinates() %>% 
-  data.frame() %>% 
-  mutate(used = 0) %>% 
-  rbind(pt.mig %>% 
-          dplyr::select(X, Y) %>% 
+pts.mig.hr <- buff.mig.hr |> 
+  st_sample(size=rep(25, nrow(buff.mig.hr))) |> 
+  st_coordinates() |> 
+  data.frame() |> 
+  mutate(used = 0) |> 
+  rbind(pt.mig |> 
+          dplyr::select(X, Y) |> 
           mutate(used = 1))
 
 #Buffer matching choice set points to figure out point size (can't use geom_sf because can't have 2 fill scales)
-ptsbuff.mig.hr <- pts.mig.hr %>% 
-  st_as_sf(coords=c("X", "Y"), crs=3857) %>% 
+ptsbuff.mig.hr <- pts.mig.hr |> 
+  st_as_sf(coords=c("X", "Y"), crs=3857) |> 
   st_buffer(dist=300)
 
 #Get background data
@@ -633,12 +635,12 @@ box.sf <- st_polygon(list(rbind(c(center.mig.shp$X-width.mig$max*0.7,
                                 c(center.mig.shp$X+width.mig$max*0.7,
                                   center.mig.shp$Y-width.mig$max*0.7),
                                 c(center.mig.shp$X-width.mig$max*0.7,
-                                  center.mig.shp$Y-width.mig$max*0.7)))) %>% 
-  st_sfc() %>% 
-  st_set_crs(3857) %>% 
+                                  center.mig.shp$Y-width.mig$max*0.7)))) |> 
+  st_sfc() |> 
+  st_set_crs(3857) |> 
   st_transform(crs=4326) 
 
-box <- box.sf %>% 
+box <- box.sf |> 
   sf_as_ee()
 
 lc<-ee$Image('COPERNICUS/Landcover/100m/Proba-V-C3/Global/2017')$select('discrete_classification')
@@ -656,12 +658,12 @@ geom_params <- ee$Geometry$Rectangle(
 #lc.local <- ee_as_raster(lc.clipped, region=geom_params, container="MCP", scale=100)
 
 #Read background data
-lc.r <- raster("Shapefiles/Fig2_lc_migration.tif") %>% 
-  raster::aggregate(10) %>% 
+lc.r <- raster("Shapefiles/Fig2_lc_migration.tif") |> 
+  raster::aggregate(10) |> 
   projectRaster(crs=3857)
 
-lc.df.mig <- lc.r %>% 
-  rasterToPoints() %>% 
+lc.df.mig <- lc.r |> 
+  rasterToPoints() |> 
   data.frame()
 colnames(lc.df.mig) <- c("x", "y", "landcover")
 
@@ -764,10 +766,10 @@ plot.betas.final <- grid.arrange(plot.betas, betas.legend, nrow=2, ncol=1, heigh
 ggsave(plot.betas.final, filename="Figures/Betas.jpeg", width=10, height=6)
 
 #4. Correlation between scales----
-betas.wide <- betas %>% 
-  dplyr::select(scale, season, mean, cov) %>% 
-  unique() %>% 
-  pivot_wider(values_from=mean, names_from=scale) %>% 
+betas.wide <- betas |> 
+  dplyr::select(scale, season, mean, cov) |> 
+  unique() |> 
+  pivot_wider(values_from=mean, names_from=scale) |> 
   rename(Roost = 'Roost site', HR = 'Home range')
 
 ggplot(betas.wide) +
@@ -787,7 +789,7 @@ ggsave(filename="Figures/ScaleCorrelation.jpeg", width=6, height=4)
 cor(betas.wide$Roost, betas.wide$HR)
 
 #5. Summary statistics----
-dat <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
+dat <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") |> 
   dplyr::filter(Season!="WinterMig")
 
 #points
@@ -796,35 +798,35 @@ table(dat$Season)
 
 #individuals
 length(unique(dat$PinpointID))
-dat %>% 
-  dplyr::select(PinpointID, Season) %>% 
-  unique() %>% 
-  group_by(Season) %>% 
+dat |> 
+  dplyr::select(PinpointID, Season) |> 
+  unique() |> 
+  group_by(Season) |> 
   summarize(n=n())
 
 #points per individual
-dat %>% 
-  dplyr::filter(PinpointID!="2217") %>% 
-  group_by(PinpointID) %>% 
-  summarize(n=n()) %>% 
-  ungroup() %>% 
+dat |> 
+  dplyr::filter(PinpointID!="2217") |> 
+  group_by(PinpointID) |> 
+  summarize(n=n()) |> 
+  ungroup() |> 
   summarize(mean = mean(n),
             sd = sd(n),
             min = min(n),
             max = max(n))
 
 #2217 points
-dat %>% 
-  dplyr::filter(PinpointID=="2217") %>% 
+dat |> 
+  dplyr::filter(PinpointID=="2217") |> 
   nrow()
 
 #Movement model selected for KDE
 m <- read.csv("KDEModelSelection.csv")
 
-m.sum <- m %>% 
-  group_by(ID) %>% 
-  arrange(ID, dAIC) %>% 
-  dplyr::filter(row_number()==1) %>% 
+m.sum <- m |> 
+  group_by(ID) |> 
+  arrange(ID, dAIC) |> 
+  dplyr::filter(row_number()==1) |> 
   ungroup()
 
 table(m.sum$mod)
@@ -833,22 +835,22 @@ table(m.sum$mod)
 pt <- read.csv("Data/Covariates_pt.csv")
 hr <- read.csv("Data/Covariates_hr.csv")
 
-evi.diff <- pt %>% 
-  dplyr::select(ptID, datediff, Radius) %>% 
-  rbind(hr %>% 
-          dplyr::select(ptID, datediff, Radius)) %>% 
+evi.diff <- pt |> 
+  dplyr::select(ptID, datediff, Radius) |> 
+  rbind(hr |> 
+          dplyr::select(ptID, datediff, Radius)) |> 
   unique()
 
-evi.sum <- evi.diff %>%  
-#  group_by(Radius) %>% 
+evi.sum <- evi.diff |>  
+#  group_by(Radius) |> 
   summarize(mean = mean(datediff),
-            sd = sd(datediff)) %>% 
+            sd = sd(datediff)) |> 
   ungroup()
 evi.sum
 
 #6. Appendix A----
 #AIC table for KDE movement
-#Vargiograms
+#Variograms
 
 #7. Clustering figure----
 dat.mig <- read.csv("Data/MigrationData.csv")
@@ -871,3 +873,25 @@ ggplot(dat.mig) +
         axis.line.y = element_blank())
 
 ggsave(filename="Figures/Stopovers.jpeg", width=8, height=4)
+
+
+
+
+
+
+
+#14. Just roosting data---
+dat.roost <- dat.all.2217 |> 
+  dplyr::filter(sun==1 | Type=="Band")
+
+table(dat.roost$Season, dat.roost$PinpointID)
+
+#Visualize
+ggplot() +
+  geom_polygon(data=whemi, aes(x=long, y=lat, group=group), colour = "gray85", fill = "gray75", size=0.3) +
+  geom_point(data=dat.roost, aes(x=Long, y=Lat, colour=factor(Season)), size=3, alpha=0.7) +
+  labs(x = "", y = "") +
+  xlim(c(-170, -30)) +
+  theme_bw() +
+  scale_colour_viridis_d() +
+  facet_wrap(~PinpointID, ncol=10)
