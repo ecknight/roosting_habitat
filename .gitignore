@@ -48,5 +48,6 @@ vignettes/*.pdf
 
 # Folders of stuff
 Figures/
-Shapefiles/
 Archive/
+Results/
+Interim/
