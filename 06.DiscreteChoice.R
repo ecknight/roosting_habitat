@@ -8,12 +8,19 @@ library(ggridges)
 options(scipen = 9999)
 
 #1. Read in data & put together----
+pop <- read.csv("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/Data/CONIMCP_CleanDataAll.csv") %>% 
+  dplyr::select(PinpointID, Population) %>% 
+  unique() %>% 
+  rbind(data.frame(PinpointID = 2217, Population = 8))
+
 pt <- read.csv("Data/Covariates_pt.csv") %>% 
   rename(PinpointID = pinpointID, 
          evi = EVI,
+         alan = ALAN,
+         hmi = HMI,
          scale = Radius) %>% 
-  dplyr::filter(Sex=="M") %>% 
-  dplyr::select(PinpointID, BirdID, ptID, scale, used, Season, cover.s, patch.s, evi.s, cropdw.s, waterdw.s)
+  dplyr::select(PinpointID, ptID, scale, used, Season, evi, grass, shrub, patch, alan, hmi, cropdw, waterdw, treedw) %>% 
+  left_join(pop)
 
 hr <- read.csv("Data/Covariates_hr.csv") %>% 
   st_as_sf(coords=c("X", "Y"), crs=4326) %>% 
@@ -21,36 +28,57 @@ hr <- read.csv("Data/Covariates_hr.csv") %>%
   st_coordinates() %>% 
   cbind(read.csv("Data/Covariates_hr.csv") %>% 
           dplyr::select(-X, -Y)) %>% 
-  dplyr::filter(Sex=="M") %>% 
   rename(scale = Radius) %>% 
-  dplyr::select(PinpointID, BirdID, ptID, scale, used, Season, cover.s, patch.s, evi.s, cropdw.s, waterdw.s)
+  dplyr::select(PinpointID, ptID, scale, used, Season, evi, grass, shrub, patch, alan, hmi, cropdw, waterdw, treedw) %>% 
+  left_join(pop)
 
-dat <- rbind(pt, hr)
+#2. Put together and scale-----
+dat <- rbind(pt, hr) %>% 
+  mutate(grass = grass/100,
+         shrub = shrub/100,
+         alan = (alan - min(alan))/(max(alan) - min(alan)),
+         evi = (evi - min(evi))/(max(evi) - min(evi)))
 
 #2. Visualize covs for polynomials----
-ggplot(dat, aes(x=cover.s, y=used, colour=scale)) + 
+ggplot(dat, aes(x=evi, y=used, colour=scale)) + 
+  #  geom_point() +
+  geom_smooth() +
+  facet_wrap(~Season, scales="free")
+#Use - no polynomial
+
+ggplot(dat, aes(x=treedw, y=used, colour=scale)) + 
+  #  geom_point() +
+  geom_smooth() +
+  facet_wrap(~Season, scales="free")
+#use - consider polynomial
+
+ggplot(dat, aes(x=patch, y=used, colour=scale)) + 
 #  geom_point() +
+  geom_smooth() +
+  facet_wrap(~Season, scales="free")
+#gah, wish this was running....
+
+ggplot(dat, aes(x=alan, y=used, colour=scale)) + 
+  geom_jitter() +
+  geom_smooth() +
+  facet_wrap(~Season, scales="free")
+#use - consider polynomial
+
+ggplot(dat, aes(x=hmi, y=used, colour=scale)) + 
+  geom_point() +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
+#use - no polynomial
 
-ggplot(dat, aes(x=patch.s, y=used, colour=scale)) + 
-#  geom_point() +
-  geom_smooth(method="lm") +
-  facet_wrap(~Season, scales="free")
-
-ggplot(dat, aes(x=evi.s, y=used, colour=scale)) + 
+ggplot(dat, aes(x=cropdw, y=used, colour=scale)) + 
   #  geom_point() +
-  geom_smooth(method="lm") +
+  geom_smooth() +
   facet_wrap(~Season, scales="free")
+#use - no polynomial
 
-ggplot(dat, aes(x=waterdw.s, y=used, colour=scale)) + 
-  #  geom_point() +
-  geom_smooth(method="lm") +
-  facet_wrap(~Season, scales="free")
-
-ggplot(dat, aes(x=cropdw.s, y=used, colour=scale)) + 
-  #  geom_point() +
-  geom_smooth(method="lm") +
+ggplot(dat, aes(x=waterdw, y=used, colour=scale)) + 
+    geom_point() +
+  geom_smooth() +
   facet_wrap(~Season, scales="free")
 
 #2. Set up loop----
@@ -66,8 +94,8 @@ betas.list <- list()
 betas.ind.list <- list()
 fit.list <- list()
 
-for(i in 1:nrow(loop)){
-#for(i in c(8:8)){  
+#for(i in 1:nrow(loop)){
+for(i in c(1:1)){  
   
   #3. Subset data----
   scale.i <- loop$scale[i]
@@ -75,7 +103,8 @@ for(i in 1:nrow(loop)){
   
   dat.i <- dat %>% 
     dplyr::filter(Season==season.i,
-                  scale==scale.i)
+                  scale==scale.i) %>% 
+    arrange(ptID)
   
   #4. Define model variables----
   
@@ -89,20 +118,39 @@ for(i in 1:nrow(loop)){
   y <- matrix(dat.i$used, nrow=nsets, ncol=nchoices, byrow=TRUE)
   
   #a vector that is the same length as the number of choice sets, specifying a numeric bird id.  The smallest number in this vector must be 1, and the largest must be equivalent to the number of unique birds.  
-  pt.breed.bird <- dat.i %>% 
-    dplyr::select(BirdID, ptID) %>% 
-    unique()
-  bird <- pt.breed.bird$BirdID
+  dat.bird <- dat.i %>% 
+    dplyr::select(PinpointID) %>% 
+    unique() %>% 
+    arrange(PinpointID) %>% 
+    mutate(BirdID = row_number()) %>% 
+    left_join(dat.i %>% 
+                dplyr::select(PinpointID, ptID) %>% 
+                unique()) %>% 
+    arrange(ptID)
+  bird <- dat.bird$BirdID
+  
+  #a vector that is the same length as the number of choice sets, specifying a numeric population id
+  # dat.pop <- dat.i %>% 
+  #   dplyr::select(Population) %>% 
+  #   unique() %>% 
+  #   arrange(Population) %>% 
+  #   mutate(PopID = row_number()) %>% 
+  #   left_join(dat.i %>% 
+  #               dplyr::select(Population, BirdID) %>% 
+  #               unique()) %>% 
+  #   arrange(BirdID)
+  # pop <- dat.pop$PopID
   
   #a matrix with the same dimensions as y that specifies the first explanatory variable for each set-by-choice combination
-  X1 <- matrix(dat.i$cover.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X2 <- matrix(dat.i$patch.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X3 <- matrix(dat.i$evi.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X4 <- matrix(dat.i$waterdw.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
-  X5 <- matrix(dat.i$cropdw.s, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X1 <- matrix(dat.i$evi, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X2 <- matrix(dat.i$treedw, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X3 <- matrix(dat.i$alan, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X4 <- matrix(dat.i$waterdw, nrow=nsets, ncol=nchoices, byrow=TRUE)
+  X5 <- matrix(dat.i$cropdw, nrow=nsets, ncol=nchoices, byrow=TRUE)
 
   #max value in the bird vector above (i.e., an integer representing how many unique birds there are)
   nbirds <- max(bird)
+#  npops <- max(pop)
   
   #5. Model specification----
   sink("Mixed model.txt")
@@ -110,27 +158,31 @@ for(i in 1:nrow(loop)){
   
 #Priors
 mu.beta1 ~ dnorm(0, 0.01)
-tau.beta1 ~ dexp(10)
+# tau.beta1 ~ dexp(10)
+# sigma.beta1 <- 1/sqrt(tau.beta1)
+# sigma.beta1 ~ dunif(0, 5)
+# tau.beta1 <- pow(sigma.beta1, -2)
+tau.beta1 ~ dgamma(0.1, 0.1)
 sigma.beta1 <- 1/sqrt(tau.beta1)
 
 mu.beta2 ~ dnorm(0, 0.01)
-tau.beta2 ~ dexp(10)
+tau.beta2 ~ dgamma(0.1, 0.1)
 sigma.beta2 <- 1/sqrt(tau.beta2)
 
 mu.beta3 ~ dnorm(0, 0.01)
-tau.beta3 ~ dexp(10)
+tau.beta3 ~ dgamma(0.1, 0.1)
 sigma.beta3 <- 1/sqrt(tau.beta3)
 
 mu.beta4 ~ dnorm(0, 0.01)
-tau.beta4 ~ dexp(10)
-sigma.beta4 <- 1/sqrt(tau.beta4)  
+tau.beta4 ~ dgamma(0.1, 0.1)
+sigma.beta4 <- 1/sqrt(tau.beta4)
 
 mu.beta5 ~ dnorm(0, 0.01)
-tau.beta5 ~ dexp(10)
-sigma.beta5 <- 1/sqrt(tau.beta5)  
+tau.beta5 ~ dgamma(0.1, 0.1)
+sigma.beta5 <- 1/sqrt(tau.beta5)
 
-for(b in 1:nbirds){    
-beta1[b] ~ dnorm(mu.beta1, tau.beta1)    
+for(b in 1:nbirds){
+beta1[b] ~ dnorm(mu.beta1, tau.beta1)
 beta2[b] ~ dnorm(mu.beta2, tau.beta2)    
 beta3[b] ~ dnorm(mu.beta3, tau.beta3)    
 beta4[b] ~ dnorm(mu.beta4, tau.beta4)   
@@ -170,7 +222,7 @@ beta5[b] ~ dnorm(mu.beta5, tau.beta5)
   inits = function()list(mu.beta1=rnorm(1), tau.beta1=runif(1))
   
   #Specify parameters to track
-  params = c("mu.beta1", "sigma.beta1", "beta1",  
+  params = c("mu.beta1", "sigma.beta1",  "beta1",
              "mu.beta2", "sigma.beta2", "beta2",           
              "mu.beta3", "sigma.beta3", "beta3",           
              "mu.beta4", "sigma.beta4", "beta4", 
@@ -178,7 +230,7 @@ beta5[b] ~ dnorm(mu.beta5, tau.beta5)
              "p", "fit.data", "fit.sim", "bpv")
 
   #Number of chains, iterations, burnin, and thinning 
-  nc=3; ni=200000; nb=100000; nt=50; na=1000 
+  nc=3; ni=250000; nb=50000; nt=50; na=1000 
   
   #7. Run JAGS----
   outM = jags(win.data, inits, params, "Mixed model.txt", n.chains=nc, n.thin=nt, n.iter=ni, n.burnin=nb, parallel=T, n.adapt = 1000)
@@ -232,7 +284,7 @@ summary <- rbindlist(summary.list)
 betas <- rbindlist(betas.list, fill=TRUE) %>% 
   pivot_longer(beta1:beta5, names_to="beta", values_to="value") 
 fit <- rbindlist(fit.list) %>% 
-  mutate(p = ifelse(bpv>=0, 1, 0))
+   mutate(p = ifelse(bpv>=0, 1, 0))
 
 #11. Save workspace----
 #save.image("CONIRoosting_WorkSpace_V2.Rdata")
@@ -242,7 +294,7 @@ fit <- rbindlist(fit.list) %>%
 for(i in 1:nrow(loop)){
   
   outM <- readRDS(paste0("Models/DiscreteChoice_", loop$scale[i], "_", loop$Season[i], ".RDS"))
-  
+   
   jpeg(paste0("Figures/Traceplots/Traceplot_beta_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
   jagsUI::traceplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5"))
   dev.off()
@@ -266,9 +318,9 @@ for(i in 1:nrow(loop)){
 #13. Beta overlap----
 overlap <- summary %>% 
   dplyr::filter(val %in%  c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5")) %>% 
-  mutate(cov = case_when(val=="mu.beta1" ~ "cover",
-                         val=="mu.beta2" ~ "patch",
-                         val=="mu.beta3" ~ "evi",
+  mutate(cov = case_when(val=="mu.beta1" ~ "evi",
+                         val=="mu.beta2" ~ "alan",
+                         val=="mu.beta3" ~ "tree",
                          val=="mu.beta4" ~ "water",
                          val=="mu.beta5" ~ "crop"))
 
@@ -285,9 +337,9 @@ overlap.0 <- overlap %>%
 table(overlap.0$season, overlap.0$scale)
 
 #14. Density plots----
-betas$cov <-  case_when(betas$beta=="beta1" ~ "cover",
-                        betas$beta=="beta2" ~ "patch",
-                        betas$beta=="beta3" ~ "evi",
+betas$cov <-  case_when(betas$beta=="beta1" ~ "evi",
+                        betas$beta=="beta2" ~ "alan",
+                        betas$beta=="beta3" ~ "tree",
                         betas$beta=="beta4" ~ "water",
                         betas$beta=="beta5" ~ "crop")
 
@@ -301,11 +353,14 @@ betas.ci <- betas %>%
 
 write.csv(betas.ci, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv", row.names = FALSE)
 
+betas.ci <- read.csv("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv")
+
 ggplot(betas.ci) +
-  geom_density_ridges(aes(x=value, y=season, fill=season, alpha=overlap0), show.legend = FALSE) +
+  geom_density_ridges(aes(x=value, y=season, fill=season, alpha=factor(overlap0)), show.legend = FALSE) +
   geom_vline(aes(xintercept=0)) +
   facet_grid(scale ~ cov, scales="free") +
-  scale_fill_viridis_d()
+  scale_fill_viridis_d() +
+  scale_alpha_manual(values=c(1, 0.3))
 
 #15. Looking for nonconvergence----
 summary.rhat <- summary %>% 
@@ -333,9 +388,8 @@ cat("model{
   
 #Priors
 mu.beta ~ dnorm(0, 0.01)
-tau.beta ~ dexp(10)
-sigma.beta <- 1/sqrt(tau.beta)
-
+sigma.beta ~ dunif(0, 5)
+tau.beta <- pow(sigma.beta, -2)
 
 for(b in 1:nbirds){    
 beta[b] ~ dnorm(mu.beta, tau.beta)    
@@ -361,6 +415,8 @@ beta[b] ~ dnorm(mu.beta, tau.beta)
 
 sink()
 
+inits = function()list(mu.beta=rnorm(1), sigma.beta=runif(1))
+
 win.data.check = list(nsets=nsets, nchoices=nchoices, bird=bird, X1=X1, nbirds=nbirds)
 
 params.check = c("mu.beta", "sigma.beta")
@@ -378,21 +434,27 @@ overlap.cov <- overlap %>%
 
 #19. Individual-level betas----
 beta1 <- data.frame(outM$sims.list$beta1) %>% 
-  mutate(cov="cover") %>% 
-  pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
+  mutate(cov="evi") %>% 
+  pivot_longer(cols=X1:X23, names_to="bird", values_to = "beta")
 beta2 <- data.frame(outM$sims.list$beta2) %>% 
-  mutate(cov="patch") %>% 
-  pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
-beta3 <- data.frame(outM$sims.list$beta3) %>% 
-  mutate(cov="hmi") %>% 
-  pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
-beta4 <- data.frame(outM$sims.list$beta4) %>% 
   mutate(cov="alan") %>% 
-  pivot_longer(cols=X1:X38, names_to="bird", values_to = "beta")
-beta.id <- rbind(beta1, beta2, beta3, beta4)
+  pivot_longer(cols=X1:X23, names_to="bird", values_to = "beta")
+beta3 <- data.frame(outM$sims.list$beta3) %>% 
+  mutate(cov="tree") %>% 
+  pivot_longer(cols=X1:X23, names_to="bird", values_to = "beta")
+beta4 <- data.frame(outM$sims.list$beta4) %>% 
+  mutate(cov="water") %>% 
+  pivot_longer(cols=X1:X23, names_to="bird", values_to = "beta")
+beta5 <- data.frame(outM$sims.list$beta5) %>% 
+  mutate(cov="crop") %>% 
+  pivot_longer(cols=X1:X23, names_to="bird", values_to = "beta")
+beta.id <- rbind(beta1, beta2, beta3, beta4, beta5) %>% 
+  mutate(BirdID = as.integer(str_sub(bird, 2, 3))) %>% 
+  left_join(dat.bird) %>% 
+  left_join(pop)
 
 ggplot(beta.id) +
-  geom_density_ridges(aes(x=beta, y=bird)) +
+  geom_density_ridges(aes(x=beta, y=bird, fill=factor(Population))) +
   geom_vline(aes(xintercept=0), linetype="dashed") +
 # xlim(c(-10, 10)) +
   facet_wrap(~cov, scales="free_x")
