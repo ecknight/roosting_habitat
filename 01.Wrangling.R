@@ -301,7 +301,7 @@ dat.country <- dat.roost %>%
 
 write.csv(dat.country, "Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv", row.names = FALSE)
 
-#16. Final numebrs----
+#16. Final numbers----
 length(unique(dat.country$PinpointID))
 length(unique(dat.country$Population))
 nrow(dat.country)
