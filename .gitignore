@@ -37,3 +37,16 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Data files
+*.csv
+*.txt
+*.Rproj
+
+# Stupid mac file
+.DS_Store
+
+# Folders of stuff
+Figures/
+Shapefiles/
+Archive/
