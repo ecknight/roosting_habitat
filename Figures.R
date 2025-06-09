@@ -733,9 +733,9 @@ plot.area <- ggsave(grid.arrange(plot.hist, plot.kde, plot.choice,
 #3. Figure 3 - Selection betas-----
 betas <- read.csv("betas.csv")
 
-betas$cov <- factor(betas$cov, levels=c("cover", "patch", "evi", "waterdist"), labels=c("% canopy cover", "Forest patch size", "EVI", "Distance to water"))
+betas$cov <- factor(betas$cov, levels=c("cover", "patch", "evi", "water", "crop"), labels=c("% canopy cover", "Forest patch size", "EVI", "% water", "% cropland"))
 betas$scale <- factor(betas$scale, levels=c("pt", "hr"), labels=c("Roost site", "Home range"))
-betas$season <- factor(betas$season, levels=c("SpringMig", "Winter", "FallMig", "Breed"), labels=c("Spring migration", "Winter", "Fall migration", "Breeding"))
+betas$season <- factor(betas$season, levels=c("SpringMig", "Winter", "FallMig", "Breed"), labels=c("Spring migration", "Nonbreeding", "Fall migration", "Breeding"))
 
 plot.betas <- ggplot(betas) +
   geom_density_ridges(aes(x=value, y=season, fill=season, alpha=factor(overlap0)), show.legend = FALSE, colour="grey30") +
@@ -746,7 +746,7 @@ plot.betas <- ggplot(betas) +
   xlab("Relative selection coefficient") +
   my.theme +
   theme(axis.title.y = element_blank())
-#plot.betas
+plot.betas
 
 plot.betas.legend <- ggplot(betas) +
   geom_density_ridges(aes(x=value, y=season, alpha=factor(overlap0)), colour="grey30", fill="grey90") +
@@ -761,9 +761,32 @@ plot.betas.legend <- ggplot(betas) +
 betas.legend <- get_legend(plot.betas.legend)
 
 plot.betas.final <- grid.arrange(plot.betas, betas.legend, nrow=2, ncol=1, heights=c(1, 0.1))
-ggsave(plot.betas.final, filename="Figures/Betas.jpeg", width=10, height=8)
+ggsave(plot.betas.final, filename="Figures/Betas.jpeg", width=10, height=6)
 
-#4. Summary statistics----
+#4. Correlation between scales----
+betas.wide <- betas %>% 
+  dplyr::select(scale, season, mean, cov) %>% 
+  unique() %>% 
+  pivot_wider(values_from=mean, names_from=scale) %>% 
+  rename(Roost = 'Roost site', HR = 'Home range')
+
+ggplot(betas.wide) +
+  geom_abline(aes(intercept=0, slope=1)) +
+  geom_hline(aes(yintercept=0), linetype="dashed") +
+  geom_vline(aes(xintercept=0), linetype="dashed") +
+  geom_point(aes(x=Roost, y=HR, colour=season, pch=cov), size=4) +
+  xlab("Roost site scale mean coefficient") +
+  ylab("Home range scale mean coefficient") +
+  scale_colour_manual(values=c("steelblue3", "chartreuse3", "coral2", "gold1"),
+                      name="Season") +
+  my.theme +
+  guides(pch=guide_legend(title="Covariate"))
+
+ggsave(filename="Figures/ScaleCorrelation.jpeg", width=6, height=4)
+
+cor(betas.wide$Roost, betas.wide$HR)
+
+#5. Summary statistics----
 dat <- read.csv("Data/CONIMCP_CleanDataAll_Habitat_Roosting.csv") %>% 
   dplyr::filter(Season!="WinterMig")
 
@@ -823,6 +846,28 @@ evi.sum <- evi.diff %>%
   ungroup()
 evi.sum
 
-#5. Appendix A----
+#6. Appendix A----
 #AIC table for KDE movement
 #Vargiograms
+
+#7. Clustering figure----
+dat.mig <- read.csv("Data/MigrationData.csv")
+dat.mig$Season <- factor(dat.mig$Season, labels=c("Fall migration", "Spring migration"))
+
+ggplot(dat.mig) +
+  geom_polygon(data=whemi, aes(x=long, y=lat, group=group), fill="gray90", colour = "gray70", size=0.3) +
+  geom_point(aes(x=Long, y=Lat, size = factor(use), colour=factor(use))) +
+  scale_size_manual(values=c(0.5, 2), name="", labels=c("Migration", "Stopover")) +
+  scale_colour_manual(values=c("grey70", "grey10"), name="", labels=c("Migration", "Stopover")) +
+  facet_wrap(~Season) +
+  xlab("") +
+  ylab("") +
+  xlim(c(-169, -30)) +
+  my.theme +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line.x = element_blank(),
+        axis.line.y = element_blank())
+
+ggsave(filename="Figures/Stopovers.jpeg", width=8, height=4)
