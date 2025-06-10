@@ -62,7 +62,12 @@ dat.sun <- getSunlightTimes(data=dat|>
                                dplyr::select(date, lat, lon)) |> 
   dplyr::select(sunrise, sunset) |> 
   cbind(dat) |> 
-  mutate(sun = ifelse(DateTime > sunrise & DateTime < sunset, 1, 0))
+  mutate(sun = ifelse(DateTime > sunrise & DateTime < sunset, 1, 0),
+         tssr = as.numeric(difftime(DateTime, sunrise, units="hours")),
+         tsss = as.numeric(difftime(DateTime, sunset, units="hours")),
+         tssr = ifelse(tssr < -12, tsss+24, tssr),
+         tssr = ifelse(tssr > 12, tssr-24, tssr),
+         tsss = ifelse(tsss < -12, tsss+24, tsss))
 
 #3. Calculate NSD----
 traj <- as.ltraj(xy=dat.sun[,c("Long", "Lat")],
@@ -255,5 +260,6 @@ dat.country <- dat.behave |>
          region = as.character(points.country$continent)) |> 
   dplyr::filter(!is.na(country)) |> 
   arrange(PinpointID, DateTime)
+
 
 save(dat.country, file="Interim/CONIMCP_Habitat.Rdata")
