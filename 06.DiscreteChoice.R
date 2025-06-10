@@ -13,6 +13,7 @@ library(data.table) # list handling
 library(sf) # working with shps
 library(usdm) # vif
 library(corrplot) # correlation plots
+library(ggridges) # visualization
 
 #1. Read in data & put together----
 load("Data/CONI_CleanData.Rdata")
@@ -65,29 +66,18 @@ ggplot(dat, aes(x=tree, y=used, colour=scale)) +
   facet_wrap(~Season, scales="free")
 #use - no polynomial
 
-#3c. Patch size ----
-ggplot(dat, aes(x=patch, fill=scale)) +
+#3c. ALAN -----
+ggplot(dat, aes(x=log(alan), fill=scale)) +
   geom_histogram() + 
   facet_wrap(~Season, scales="free")
 
-ggplot(dat, aes(x=patch, y=used, colour=scale)) + 
+ggplot(dat, aes(x=log(alan), y=used, colour=scale)) + 
   geom_jitter(size=0.5) +
-  geom_smooth() +
-  facet_wrap(~Season, scales="free")
-#this isn't useful, needs to be a factor or nothing
-
-#3d. ALAN -----
-ggplot(dat, aes(x=alan, fill=scale)) +
-  geom_histogram() + 
-  facet_wrap(~Season, scales="free")
-
-ggplot(dat, aes(x=alan, y=used, colour=scale)) + 
-#  geom_jitter(size=0.5) +
   geom_smooth(method="lm") +
   facet_wrap(~Season, scales="free")
 #use - consider polynomial
 
-#3e. Human modification ----
+#3d. Human modification ----
 ggplot(dat, aes(x=hmi, fill=scale)) +
   geom_histogram() + 
   facet_wrap(~Season, scales="free")
@@ -98,7 +88,7 @@ ggplot(dat, aes(x=hmi, y=used, colour=scale)) +
   facet_wrap(~Season, scales="free")
 #use - no polynomial
 
-#3f. Crop probability ----
+#3e. Crop probability ----
 ggplot(dat, aes(x=crop, fill=scale)) +
   geom_histogram() + 
   facet_wrap(~Season, scales="free")
@@ -109,7 +99,7 @@ ggplot(dat, aes(x=crop, y=used, colour=scale)) +
   facet_wrap(~Season, scales="free")
 #use - no polynomial
 
-#3e. Water probability -----
+#3f. Water probability -----
 ggplot(dat, aes(x=log(water), fill=scale)) +
   geom_histogram() + 
   facet_wrap(~Season, scales="free")
@@ -155,7 +145,7 @@ betas.list <- list()
 betas.ind.list <- list()
 fit.list <- list()
 
-for(i in 1:nrow(loop)){
+for(i in 2:nrow(loop)){
   
   #6. Subset data----
   scale.i <- loop$scale[i]
@@ -172,7 +162,7 @@ for(i in 1:nrow(loop)){
   nsets <- length(unique(dat.i$ptID))
   
   #a vector identifying how many alternatives (including the chosen one) are available for each choice set.
-  nchoices <- rep(26, nsets)
+  nchoices <- rep(21, nsets)
   
   #a sets-by-alternatives matrix of 0 (available) and 1(used) values.  So if there are 100 choice sets, each with 20 possible choices, this is a 100-by-20 matrix
   y <- matrix(dat.i$used, nrow=nsets, ncol=nchoices, byrow=TRUE)
@@ -326,7 +316,7 @@ beta6[b] ~ dnorm(mu.beta6, tau.beta6)
                          scale=scale.i,
                          season=season.i)
   
-  save(outM, file=paste0("Models/DiscreteChoice_", scale.i,"_", season.i,".Rdata"))
+  save(outM, file=paste0("Results/Models/DiscreteChoice_", scale.i,"_", season.i,".Rdata"))
   
   print(paste0("Finished model ", i, " of ", nrow(loop), " models in ", outM$mcmc.info$elapsed.mins, " minutes"))
   
@@ -336,18 +326,18 @@ beta6[b] ~ dnorm(mu.beta6, tau.beta6)
 model <- rbindlist(model.list)
 summary <- rbindlist(summary.list)
 betas <- rbindlist(betas.list, fill=TRUE) |> 
-  pivot_longer(beta1:beta5, names_to="beta", values_to="value") 
+  pivot_longer(beta1:beta6, names_to="beta", values_to="value") 
 fit <- rbindlist(fit.list) |> 
    mutate(p = ifelse(bpv>=0, 1, 0))
 
 #13. Save workspace----
-save.image("CONIRoosting_WorkSpace_V2.Rdata")
-load("/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/CONIRoosting_WorkSpace_V2.Rdata")
+save.image("CONIRoosting_WorkSpace.Rdata")
+load("CONIRoosting_WorkSpace.Rdata")
 
 #14. Save out traceplots----
 for(i in 1:nrow(loop)){
   
-  outM <- readRDS(paste0("Models/DiscreteChoice_", loop$scale[i], "_", loop$Season[i], ".RDS"))
+  load(paste0("Results/Models/DiscreteChoice_", loop$scale[i], "_", loop$Season[i], ".Rdata"))
    
   jpeg(paste0("Figures/Traceplots/Traceplot_beta_",loop$scale[i], "_", loop$Season[i], ".jpeg"))
   jagsUI::traceplot(outM, parameters = c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5"))
@@ -371,12 +361,13 @@ for(i in 1:nrow(loop)){
 
 #15. Beta overlap----
 overlap <- summary |> 
-  dplyr::filter(val %in%  c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5")) |> 
+  dplyr::filter(val %in%  c("mu.beta1", "mu.beta2", "mu.beta3", "mu.beta4", "mu.beta5", "mu.beta6")) |> 
   mutate(cov = case_when(val=="mu.beta1" ~ "evi",
-                         val=="mu.beta2" ~ "alan",
-                         val=="mu.beta3" ~ "tree",
-                         val=="mu.beta4" ~ "water",
-                         val=="mu.beta5" ~ "crop"))
+                         val=="mu.beta2" ~ "tree",
+                         val=="mu.beta3" ~ "alan",
+                         val=="mu.beta4" ~ "hmi",
+                         val=="mu.beta5" ~ "water",
+                         val=="mu.beta6" ~ "crop"))
 
 overlap$scale <- factor(overlap$scale, levels=c("pt", "hr"))
 
@@ -392,10 +383,11 @@ table(overlap.0$season, overlap.0$scale)
 
 #16. Density plots----
 betas$cov <-  case_when(betas$beta=="beta1" ~ "evi",
-                        betas$beta=="beta2" ~ "alan",
-                        betas$beta=="beta3" ~ "tree",
-                        betas$beta=="beta4" ~ "water",
-                        betas$beta=="beta5" ~ "crop")
+                        betas$beta=="beta2" ~ "tree",
+                        betas$beta=="beta3" ~ "alan",
+                        betas$beta=="beta4" ~ "hmi",
+                        betas$beta=="beta5" ~ "water",
+                        betas$beta=="beta6" ~ "crop")
 
 betas$scale <- factor(betas$scale, levels=c("pt", "hr"))
 
@@ -405,9 +397,8 @@ betas.ci <- betas |>
   dplyr::filter(value > lower, value < upper) |> 
   mutate(cov = as.factor(cov))
 
-write.csv(betas.ci, "/Users/ellyknight/Documents/UoA/Projects/Projects/MCP2/Analysis/roosting_habitat/betas.csv", row.names = FALSE)
-
-betas.ci <- read.csv("betas.csv")
+write.csv(betas.ci, "Results/betas.csv", row.names = FALSE)
+betas.ci <- read.csv("Results/betas.csv")
 
 ggplot(betas.ci) +
   geom_density_ridges(aes(x=value, y=season, fill=season, alpha=factor(overlap0)), show.legend = FALSE) +
