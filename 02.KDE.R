@@ -73,6 +73,8 @@ dat.kde.m <- dat.kde |>
   unique() |> 
   arrange(tag.local.identifier, timestamp)
 
+write.csv(dat.kde.m, "Interim/KDEData.csv", row.names = FALSE)
+
 #6. Format for ctmm----
 datt <- as.telemetry(dat.kde.m, timezone="UTC")
 
@@ -94,7 +96,8 @@ m.area <- data.frame()
 for(i in 1:length(ids)){
   m.guess <- ctmm.guess(datt[[ids[i]]], interactive=FALSE)
   m.fits <- ctmm.select(datt[[ids[i]]], m.guess, verbose=TRUE, cores=2)
-  m.sum <- data.frame(dAIC=summary(m.fits)[,1]) |> 
+  m.sum <- data.frame(dAIC=summary(m.fits)[,1],
+                      ) |> 
     mutate(mod = row.names(data.frame(summary(m.fits))),
            ID=ids[i])  |> 
     rbind(m.sum)
