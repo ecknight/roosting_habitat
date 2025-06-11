@@ -37,6 +37,7 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+CONIRoosting_WorkSpace.Rdata
 
 # Data files
 *.csv
@@ -51,3 +52,6 @@ Figures/
 Archive/
 Results/
 Interim/
+
+# google key
+00.gkey.R
