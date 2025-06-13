@@ -11,16 +11,10 @@ library(sf) # working with shps
 library(raster) # working with rasters
 library(ggridges) # density ridge plots
 library(ggmap) # base map data
-library(cowplot) # get legend grobs
+library(gtable) # legend grobs
 library(gridExtra) # panelled plots
 library(grid) # get text grobs
 library(ggsn) # map legends
-
-# library(ggspatial)
-# library(ggforce)
-
-# library(maps)
-# library(Cairo)
 
 # Preamble - set themes
 my.theme <- theme_classic() +
@@ -725,60 +719,79 @@ plot.area <- ggsave(grid.arrange(plot.hist, plot.kde, plot.choice,
 
 
 #3. Figure 3 - Selection betas-----
-betas <- read.csv("betas.csv")
+betas <- read.csv("Results/beta_summary.csv")
 
-betas$cov <- factor(betas$cov, levels=c("cover", "patch", "evi", "water", "crop"), labels=c("% canopy cover", "Forest patch size", "EVI", "% water", "% cropland"))
-betas$scale <- factor(betas$scale, levels=c("pt", "hr"), labels=c("Roost site", "Home range"))
-betas$season <- factor(betas$season, levels=c("SpringMig", "Winter", "FallMig", "Breed"), labels=c("Spring migration", "Nonbreeding", "Fall migration", "Breeding"))
+betas$cov <- factor(betas$cov, levels=c("evi", "tree", "water", "crop", "alan"), labels=c("EVI", "Probability treed", "Probability water", "Probability crop", "ALAN"))
+betas$scale <- factor(betas$scale, levels=c("pt", "hr"), labels=c("Local scale", "Landscape scale"))
+betas$season <- factor(betas$season, levels=c("SpringMig", "Winter", "FallMig", "Breed"), labels=c("Spring\nmigration", "Winter", "Fall\nmigration", "Breeding"))
 
 plot.betas <- ggplot(betas) +
   geom_density_ridges(aes(x=value, y=season, fill=season, alpha=factor(overlap0)), show.legend = FALSE, colour="grey30") +
   geom_vline(aes(xintercept=0), linetype="dashed") +
   facet_grid(scale ~ cov, scales="free") +
   scale_fill_manual(values=c("steelblue3", "chartreuse3", "coral2", "gold1")) +
-  scale_alpha_manual(values=c(0.9, 0.4)) +
+  scale_alpha_manual(values=c(0.9, 0.2)) +
   xlab("Relative selection coefficient") +
   my.theme +
   theme(axis.title.y = element_blank())
 plot.betas
 
 plot.betas.legend <- ggplot(betas) +
-  geom_density_ridges(aes(x=value, y=season, alpha=factor(overlap0)), colour="grey30", fill="grey90") +
+  geom_density_ridges(aes(x=value, y=season, alpha=factor(overlap0)), colour="grey30", fill="grey40") +
   geom_vline(aes(xintercept=0), linetype="dashed") +
   facet_grid(scale ~ cov, scales="free") +
-  scale_alpha_manual(values=c(0.9, 0.4), name="95% CI", labels=c("No overlap 0", "Overlap 0")) +
+  scale_alpha_manual(values=c(0.9, 0.2), name="95% CI", labels=c("No overlap 0", "Overlap 0")) +
   xlab("Relative selection coefficient") +
   my.theme +
   theme(axis.title.y = element_blank(),
         legend.position="bottom")
-#plot.betas.legend
-betas.legend <- get_legend(plot.betas.legend)
+plot.betas.legend
+
+plot.grobs <- ggplotGrob(plot.betas.legend)
+legend_index <- which(sapply(plot.grobs$grobs, function(x) x$name) == "guide-box")
+betas.legend <- plot.grobs$grobs[[legend_index]]
 
 plot.betas.final <- grid.arrange(plot.betas, betas.legend, nrow=2, ncol=1, heights=c(1, 0.1))
-ggsave(plot.betas.final, filename="Figures/Betas.jpeg", width=10, height=6)
+ggsave(plot.betas.final, filename="Figures/3_Betas.jpeg", width=12, height=8)
 
-#4. Correlation between scales----
+#4. Figure 4 - Correlation between scales----
+betas <- read.csv("Results/beta_summary.csv")
+
+betas$cov <- factor(betas$cov, levels=c("evi", "tree", "water", "crop", "alan"), labels=c("EVI", "Probability treed", "Probability water", "Probability crop", "ALAN"))
+betas$scale <- factor(betas$scale, levels=c("pt", "hr"), labels=c("Local scale", "Landscape scale"))
+betas$season <- factor(betas$season, levels=c("SpringMig", "Winter", "FallMig", "Breed"), labels=c("Spring\nmigration", "Winter", "Fall\nmigration", "Breeding"))
+
 betas.wide <- betas |> 
-  dplyr::select(scale, season, mean, cov) |> 
+  dplyr::select(scale, season, mean, upper, lower, cov, overlap0) |> 
   unique() |> 
-  pivot_wider(values_from=mean, names_from=scale) |> 
-  rename(Roost = 'Roost site', HR = 'Home range')
+  mutate(upper = round(upper, 2),
+         lower = round(lower, 2))
+  pivot_wider(values_from=c(mean, lower, upper), names_from=scale) |> 
+  mutate(signdiff = case_when(`mean_Local scale` > 0 & `mean_Landscape scale` < 0 ~ 1,
+                              `mean_Local scale` < 0 & `mean_Landscape scale` > 0 ~ 1,
+                              !is.na(`mean_Local scale`) ~ 0))
 
 ggplot(betas.wide) +
   geom_abline(aes(intercept=0, slope=1)) +
   geom_hline(aes(yintercept=0), linetype="dashed") +
   geom_vline(aes(xintercept=0), linetype="dashed") +
-  geom_point(aes(x=Roost, y=HR, colour=season, pch=cov), size=4) +
-  xlab("Roost site scale mean coefficient") +
-  ylab("Home range scale mean coefficient") +
+  geom_errorbar(aes(ymin=`lower_Landscape scale`, ymax = `upper_Landscape scale`,
+                    x=`mean_Local scale`, colour=season)) +
+  geom_errorbar(aes(y=`mean_Landscape scale`, xmin = `lower_Local scale`,
+                    xmax=`upper_Local scale`, colour=season)) +
+  geom_point(aes(x=`mean_Local scale`, y=`mean_Landscape scale`, colour=season, pch=cov), size=4) +
+  xlab("Local scale mean beta") +
+  ylab("landscape scale mean beta") +
   scale_colour_manual(values=c("steelblue3", "chartreuse3", "coral2", "gold1"),
                       name="Season") +
   my.theme +
+ xlim(c(-52, 34)) +
+ ylim(c(-52, 34)) +
   guides(pch=guide_legend(title="Covariate"))
 
-ggsave(filename="Figures/ScaleCorrelation.jpeg", width=6, height=4)
+ggsave(filename="Figures/4_ScaleCorrelation.jpeg", width=6, height=4)
 
-cor(betas.wide$Roost, betas.wide$HR)
+cor(betas.wide$`Local scale`, betas.wide$`Landscape scale`)
 
 #5. Summary statistics----
 load("Interim/CONIMCP_Habitat.Rdata")
