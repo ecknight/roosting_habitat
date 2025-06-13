@@ -57,10 +57,10 @@ lm.stationary.scale <- brm(value ~ scale + (1|cov) + (1|season), data=betas.stat
                            warmup = 1000, iter = 5000)
 lm.stationary.scale
 
-# lm.migration.scale <- brm(value ~ scale + (1|cov) + (1|season), data=betas.migration,
-#                           chains = 3, cores = 3, thin=20, control = list(adapt_delta = 0.9),
-#                           warmup = 1000, iter = 5000)
-# lm.migration.scale
+lm.migration.scale <- brm(value ~ scale + (1|cov) + (1|season), data=betas.migration,
+                          chains = 3, cores = 3, thin=20, control = list(adapt_delta = 0.9),
+                          warmup = 1000, iter = 5000)
+lm.migration.scale
 
 save(lm.stationary.scale, lm.migration.scale, file="Results/Predictions/P3ScaleVariation.Rdata")
 
