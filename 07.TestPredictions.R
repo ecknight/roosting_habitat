@@ -7,87 +7,78 @@
 
 # Preamble - load packages
 library(tidyverse) # data wrangling
-library(lme4) # mixed effects models
-library(MuMIn) # dredging
+library(brms) # bayesian modelling for dummies
 
 #1. Get the betas----
 betas <- read.csv("Results/betas.csv")
 
-#2. P1. Strength between scales for roost variables
-
-# "First, we predicted that selection for variables that represent potential roost camouflage (tree cover, enhanced vegetation index) would be stronger at the local scale than the landscape scale, given that selection is expected to be driven by costs and benefits of the habitat itself that is used for a particular behaviour (Hutto 1985)."
-
-#2a. Visualize ----
-ggplot(betas |> dplyr::filter(cov %in% c("tree", "evi"))) + 
-  geom_violin(aes(x=season, y=value, fill=scale)) +
-  geom_hline(aes(yintercept = 0)) +
-  facet_wrap(~cov)
-
-#2b. Filter -----
-betas.tree <- betas |> 
-  dplyr::filter(cov=="tree") |> 
-  mutate(scale = factor(scale, levels=c("pt", "hr")))
-
-betas.evi <- betas |> 
-  dplyr::filter(cov=="evi") |> 
-  mutate(scale = factor(scale, levels=c("pt", "hr")))
-
-#2c. Test ----
-lm.tree <- lmer(value ~ scale + (1|season), data=betas.tree, na.action="na.fail")
-dredge(lm.tree)
-summary(lm.tree)
-
-lm.evi <- lmer(value ~ scale + (1|season), data=betas.evi, na.action="na.fail")
-dredge(lm.evi)
-summary(lm.evi)
-
-#3. P2 Strength between seasons at local scale for roost variables
-
-#"We also predicted that the strength of selection for variables that represent potential roost camouflage would not differ across seasons at the local scale, given the importance of roosting for survival across the annual cycle (Chernetsov 2006)."
-
-#3a. Visualize ----
-ggplot(betas |> dplyr::filter(cov %in% c("tree", "evi"), scale=="pt")) + 
-  geom_violin(aes(x=season, y=value, fill=scale)) +
-  geom_hline(aes(yintercept = 0)) +
-  facet_wrap(~cov)
-
-#3b. Filter -----
-betas.tree.pt <- betas |> 
-  dplyr::filter(cov=="tree", scale=="pt")
-mutate(season = factor(season, levels=c("Breed", "FallMig", "Winter", "SpringMig")))
-
-betas.evi.pt <- betas |> 
-  dplyr::filter(cov=="evi", scale=="pt") |> 
-  mutate(season = factor(season, levels=c("Breed", "FallMig", "Winter", "SpringMig")))
-
-#3c. Test ----
-lm.tree.pt <- lm(value ~ season, data=betas.tree.pt, na.action="na.fail")
-dredge(lm.tree)
-summary(lm.tree)
-
-lm.evi.pt <- lm(value ~ season, data=betas.evi.pt, na.action="na.fail")
-dredge(lm.evi)
-summary(lm.evi)
-
-#4. P3 Overall strength at landscape scale ----
-
-#"Third, we predicted that the overall strength of habitat selection at the landscape scale would be stronger during the stationary seasons than migration seasons, given the shift to more generalist habitat selection during migration and (Petit 2000, Chernetsov 2006, Stanley et al. 2020)."
-
-#4a. Visualize ----
-ggplot(betas |> dplyr::filter(scale=="hr") |> 
-         mutate(group = ifelse(season %in% c("Breed", "Winter"), "Stationary", "Migration"))) + 
-  geom_violin(aes(x=season, y=value, fill=group)) +
-  geom_hline(aes(yintercept = 0)) +
-  facet_wrap(~cov)
-
-#4b. Filter ----
-betas.hr <- betas |> 
-  dplyr::filter(scale=="hr") |> 
+set.seed(1)
+betas.overall <- betas |> 
   mutate(group = ifelse(season %in% c("Breed", "Winter"), "Stationary", "Migration"),
          group = factor(group, levels=c("Stationary", "Migration")),
-         value = abs(value))
+         value = abs(value))  |> 
+  group_by(season, cov, scale) |> 
+  sample_n(1000) |> 
+  ungroup()
 
-#4c. Test ---
-lm.hr <- lmer(value ~ group + (1|cov), data=betas.hr, na.action="na.fail")
-dredge(lm.hr)
-summary(lm.hr)
+#2. P1 Overall strength at landscape scale ----
+
+lm.strength <- brm(value ~ group + (1|cov) + (1|scale), data=betas.overall,
+             chains = 3, cores = 3, thin=20, control = list(adapt_delta = 0.9),
+             warmup = 1000, iter = 5000)
+lm.strength
+
+save(lm.strength, file="Results/Predictions/P1SeasonStrength.Rdata")
+
+#3. P2 Variation between stationary seasons & migration seasons ----
+
+betas.stationary <- betas.overall |> 
+  dplyr::filter(group=="Stationary")
+
+betas.migration <- betas.overall |> 
+  dplyr::filter(group=="Migration")
+
+lm.stationary <- brm(value ~ season + (1|cov) + (1|scale), data=betas.stationary,
+                     chains = 3, cores = 3, thin=20, control = list(adapt_delta = 0.9),
+                     warmup = 1000, iter = 5000)
+lm.stationary
+
+lm.migration <- brm(value ~ season + (1|cov) + (1|scale), data=betas.migration,
+                    chains = 3, cores = 3, thin=20, control = list(adapt_delta = 0.9),
+                    warmup = 1000, iter = 5000)
+lm.migration
+
+save(lm.stationary, lm.migration, file="Results/Predictions/P2SeasonVariation.Rdata")
+
+#4. P3 Strength between scales -----
+
+lm.stationary.scale <- brm(value ~ scale + (1|cov) + (1|season), data=betas.stationary,
+                           chains = 3, cores = 3, thin=20, control = list(adapt_delta = 0.9),
+                           warmup = 1000, iter = 5000)
+lm.stationary.scale
+
+# lm.migration.scale <- brm(value ~ scale + (1|cov) + (1|season), data=betas.migration,
+#                           chains = 3, cores = 3, thin=20, control = list(adapt_delta = 0.9),
+#                           warmup = 1000, iter = 5000)
+# lm.migration.scale
+
+save(lm.stationary.scale, lm.migration.scale, file="Results/Predictions/P3ScaleVariation.Rdata")
+
+#5. P4 Correlation between scales ----
+
+#5a. Get data ----
+betas.ci <- read.csv("Results/beta_summary.csv")
+
+#5b. Wrangle ----
+betas.mn <- betas.ci |> 
+  dplyr::select(scale, season, cov, mean) |> 
+  unique() |> 
+  pivot_wider(names_from=scale, values_from=mean)
+
+#5c. Visualize ----
+ggplot(betas.mn) +
+  geom_abline(aes(intercept=0, slope=1), linetype="dashed") +
+  geom_point(aes(x=pt, y=hr, colour=cov, pch=season), size=3)
+
+#5d. Test ----
+cor(betas.mn$pt, betas.mn$hr)
